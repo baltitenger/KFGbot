@@ -7,7 +7,6 @@
 #In order to replace it put your own link to the code the way it is shown below.
 #menu_xml = urllib.request.urlopen('#own link#&day=' + date.isoformat()).read().decode('utf-8')
 
-#Apparently the programme is under developement, there are some issues to be fixed and new features, sutch as sending in the
-#teacher substitutions are coming.
+#Apparently the programme is under developement, there are some issues to be fixed and new features are coming.
 #KFG-bot is uncapable of processing data unless it is given in the same format as it is in KFG.
 #In order use KFG-bot in an other school you'll probably have to rewrite parts of the code. Feel free to ask for help.
