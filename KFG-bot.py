@@ -350,7 +350,10 @@ async def on_message(message):
 print('Starting...')
 
 try:
-    client.loop.run_until_complete(client.start('NDIyNDQ5ODQ2NTExODYxNzcw.DYb9UQ.nCazmnrwAkBnN-SlT77kiMGYeSs'))
+    with open('token') as f: token = f.readline().strip()
+    client.loop.run_until_complete(client.start(token))
+except FileNotFoundError:
+    print('Token file not found.')
 except KeyboardInterrupt:
     client.loop.run_until_complete(client.logout())
     # cancel all tasks lingering
