@@ -122,10 +122,9 @@ async def print_menu(channels, user, date):
             for channel in channels:
                 await client.send_message(channel, embed=embed)
         else:
-            print(channels, user.mention, embed.to_dict())
             await client.send_message(channels[0], user.mention, embed=embed)
 
-
+"""
 async def print_substitutions(channel_ids, user, date):
     if date == datetime.date.today():
         if datetime.datetime.now().time() > datetime.time(16, 00):
@@ -145,7 +144,7 @@ async def print_substitutions(channel_ids, user, date):
     substitutions_for_classes = { channel_id:filter(lambda entry: entry['class'] == substitutions_ch[CLASSINFO][channel_id], substitutions_list) for cannel_id in channel_ids }
     for channel_id in channel_ids:
         pass
-
+"""
 
 async def daily_lunch():
     now = datetime.datetime.now()
@@ -167,6 +166,136 @@ async def daily_lunch():
         now = datetime.datetime.now()
 
 
+
+
+async def lunch_help(command, channel, author): # $lunch
+    embed = discord.Embed(title='Available commands for $lunch:', type='rich', description='on HH:MM or HH\noff HH:MM or HH\ntoday\ntomorrow\nday YYYY-MM-DD or MM-DD or DD\ninfo', color=discord.Color.blue())
+    await client.send_message(channel, author.mention, embed=embed)
+
+
+async def lunch_on(command, channel, author): # $lunch on
+    global daily_lunch_task 
+    if len(command) < 1:
+        embed = discord.Embed(title='Error!', description='Please type in a time for the lunch notifications!', type='rich', color=discord.Color.red())
+        await client.send_message(channel, author.mention, embed=embed)
+    else:
+        time = command[0]
+        try:
+            hour = int(time.split(':')[0])
+            if len(time.split(':')) == 2:
+                minute = int(time.split(':')[1])
+            else: minute = 0
+            time = datetime.time(hour, minute)
+        except ValueError:
+            embed = discord.Embed(title='Error!', description='Please type in a valid time', type='rich', color=discord.Color.red())
+            await client.send_message(channel, author.mention, embed=embed)
+            return
+        if len(lunch_ch) == 0:
+            lunch_ch.append({TIME:time, CHANNELS:[channel]})
+        else:
+            for i_time in range(len(lunch_ch)):
+                if lunch_ch[i_time][TIME] == time:
+                    if not channel in lunch_ch[i_time][CHANNELS]:
+                        lunch_ch[i_tme][CHANNELS].append(cahnnel)
+                    break
+                if lunch_ch[i_time][TIME] > time:
+                    lunch_ch.insert(i_time, {TIME:time, CHANNELS:[channel]})
+                    break
+                if i_time == len(lunch_ch) - 1:
+                    lunch_ch.append({TIME:time, CHANNELS:[channel]})
+                    break
+        save_list('lunch')
+        if daily_lunch_task != None:
+            daily_lunch_task.cancel()
+        daily_lunch_task = client.loop.create_task(daily_lunch())
+        embed = discord.Embed(title='Success!', description='You have enabled lunch notifications for this channel! You will get them every day at ' + time.strftime('%H:%M'), type='rich', color=discord.Color.green())
+        await client.send_message(channel, author.mention, embed=embed)
+
+
+async def lunch_off(command, channel, author): # $lunch off
+    global daily_lunch_task 
+    if len(command) < 1:
+        embed = discord.Embed(title='Error!', description='Please type in a time to remove!', type='rich', color=discord.Color.red())
+        await client.send_message(channel, author.mention, embed=embed)
+    else:
+        time = command[0]
+        try:
+            hour = int(time.split(':')[0])
+            if len(time.split(':')) == 2:
+                minute = int(time.split(':')[1])
+            else: minute = 0
+            time = datetime.time(hour, minute)
+        except ValueError:
+            embed = discord.Embed(title='Error!', description='Please type in a valid time', type='rich', color=discord.Color.red())
+            await client.send_message(channel, author.mention, embed=embed)
+            return
+        for i_time in range(len(lunch_ch)):
+            if lunch_ch[i_time][TIME] == time:
+                if channel in lunch_ch[i_time][CHANNELS]:
+                    lunch_ch[i_time][CHANNELS].remove(channel)
+                    if len(lunch_ch[i_time][CHANNELS]) == 0:
+                        lunch_ch.pop(i_time)
+                    daily_lunch_task.cancel()
+                    if len(lunch_ch) > 0:
+                        daily_lunch_task = client.loop.create_task(daily_lunch())
+                    embed = discord.Embed(title='Success!', description='You have turned off lunch notifications for this channel at ' + time.strftime('%H:%M') + '!', type='rich', color=discord.Color.green())
+                    await client.send_message(channel, author.mention, embed=embed)
+                else:
+                    embed = discord.Embed(title='Error!', description='There wasn\'t a lunch notification scheduled at ' + time.strftime('%H:%M') + ' in this channel!\nTry $lunch info.', type='rich', color=discord.Color.red())
+                    await client.send_message(channel, author.mention, embed=embed)
+                return
+        save_list('lunch')
+        embed = discord.Embed(title='Error!', description='There wasn\'t a lunch notification scheduled at ' + time.strftime('%H:%M') + ' in this channel!\nTry $lunch info.', type='rich', color=discord.Color.red())
+        await client.send_message(channel, author.mention, embed=embed)
+
+
+async def lunch_info(command, channel, author): # $lunch info
+    times = []
+    for i_time in range(len(lunch_ch)):
+        if channel in lunch_ch[i_time][CHANNELS]:
+            times.append(lunch_ch[i_time][TIME].strftime('%H:%M'))
+    #times = '\n'.join(times)
+    if len(times) == 0:
+        description = 'There aren\'t any lunch notifications set for this channel.'
+    elif len(times) == 1:
+        description = 'You will get lunch notifications at ' + times[0]
+    else:
+        description = 'You will get lunch notifications at the following times:\n' + '\n'.join(times)
+    embed = discord.Embed(title='Here you go:', description=description, type='rich', color=discord.Color.blue())
+    await client.send_message(channel, author.mention, embed=embed)
+
+
+async def lunch_today(command, channel, author): # $lunch today
+    await print_menu([channel], author, datetime.date.today())
+
+
+async def lunch_tomorrow(command, channel, author): # $lunch tomorrow
+    await print_menu([channel], author, datetime.date.today() + datetime.timedelta(days=1))
+
+
+async def lunch_day(command, channel, author): # $lunch day
+    if len(command) != 1:
+        embed = discord.Embed(title='Error!', description='Please type in a date for your lunch request!', type='rich', color=discord.Color.red())
+        await client.send_message(channel, author.mention, embed=embed)
+    else:
+        date = command[0]
+        try:
+            date = date.split('-')
+            day = int(date[len(date) - 1])
+            if len(date) >= 2:
+                month = int(date[len(date) - 2])
+            else: month = datetime.date.today().month
+            if len(date) == 3:
+                year = int(date[0])
+            else: year = datetime.date.today().year
+            date = datetime.date(year, month, day)
+        except ValueError:
+            embed = discord.Embed(title='Error!', description='Please type in a valid date!', type='rich', color=discord.Color.red())
+            await client.send_message(channel, author.mention, embed=embed)
+            return
+        await print_menu([channel], author, date)
+
+
 @client.event
 async def on_ready():
     global daily_lunch_task
@@ -179,123 +308,23 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    if message.content.startswith('#'):
+    if message.content.startswith('$'):
         await client.delete_message(message)
         channel = message.channel
         author = message.author
-        command = message.content.split(' ')
-        if command[0] == '#lunch':
-            global daily_lunch_task
-            if len(command) == 1:
-                embed = discord.Embed(title='Available commands for $lunch:', type='rich', description='on HH:MM or HH\noff HH:MM or HH\ntoday\ntomorrow\nday YYYY-MM-DD or MM-DD or DD\ninfo', color=discord.Color.blue())
-                await client.send_message(channel, author.mention, embed=embed)
-            elif command[1] == 'on':
-                if len(command) < 3:
-                    embed = discord.Embed(title='Error!', description='Please type in a time for the lunch notifications!', type='rich', color=discord.Color.red())
-                    await client.send_message(channel, author.mention, embed=embed)
-                else:
-                    try:
-                        hour = int(command[2].split(':')[0])
-                        if len(command[2].split(':')) == 2:
-                            minute = int(command[2].split(':')[1])
-                        else: minute = 0
-                    except ValueError:
-                        embed = discord.Embed(title='Error!', description='Please type in a valid time', type='rich', color=discord.Color.red())
-                        await client.send_message(channel, author.mention, embed=embed)
-                        return
-                    time = datetime.time(hour, minute)
-                    if len(lunch_ch) == 0:
-                        lunch_ch.append({TIME:time, CHANNELS:[channel]})
-                    else:
-                        for i_time in range(len(lunch_ch)):
-                            if lunch_ch[i_time][TIME] == time:
-                                if not channel in lunch_ch[i_time][CHANNELS]:
-                                    lunch_ch[i_tme][CHANNELS].append(cahnnel)
-                                break
-                            if lunch_ch[i_time][TIME] > time:
-                                lunch_ch.insert(i_time, {TIME:time, CHANNELS:[channel]})
-                                break
-                            if i_time == len(lunch_ch) - 1:
-                                lunch_ch.append({TIME:time, CHANNELS:[channel]})
-                                break
-                    save_list('lunch')
-                    if daily_lunch_task != None:
-                        daily_lunch_task.cancel()
-                    daily_lunch_task = client.loop.create_task(daily_lunch())
-                    embed = discord.Embed(title='Success!', description='You have enabled lunch notifications for this channel! You will get them every day at ' + time.strftime('%H:%M'), type='rich', color=discord.Color.green())
-                    await client.send_message(channel, author.mention, embed=embed)
+        await {
+            '$lunch': lunch_help,
+            '$lunch on': lunch_on,
+            '$lunch off': lunch_off,
+            '$lunch info': lunch_info,
+            '$lunch today': lunch_today,
+            '$lunch tomorrow': lunch_tomorrow,
+            '$lunch day': lunch_day
+        }.get(' '.join(message.content.split(' ')[:2]), lambda a, b, c: None)(message.content.split(' ')[2:], channel, author)
 
-            elif command[1] == 'off':
-                if len(command) < 3:
-                    embed = discord.Embed(title='Error!', description='Please type in a time to remove!', type='rich', color=discord.Color.red())
-                    await client.send_message(channel, author.mention, embed=embed)
-                else:
-                    try:
-                        hour = int(command[2].split(':')[0])
-                        if len(command[2].split(':')) == 2:
-                            minute = int(command[2].split(':')[1])
-                        else: minute = 0
-                    except ValueError:
-                        embed = discord.Embed(title='Error!', description='Please type in a valid time', type='rich', color=discord.Color.red())
-                        await client.send_message(channel, author.mention, embed=embed)
-                        return
-                    time = datetime.time(hour, minute)
-                    for i_time in range(len(lunch_ch)):
-                        if lunch_ch[i_time][TIME] == time:
-                            if channel in lunch_ch[i_time][CHANNELS]:
-                                lunch_ch[i_time][CHANNELS].remove(channel)
-                                if len(lunch_ch[i_time][CHANNELS]) == 0:
-                                    lunch_ch.pop(i_time)
-                                daily_lunch_task.cancel()
-                                if len(lunch_ch) > 0:
-                                    daily_lunch_task = client.loop.create_task(daily_lunch())
-                                embed = discord.Embed(title='Success!', description='You have turned off lunch notifications for this channel at ' + time.strftime('%H:%M') + '!', type='rich', color=discord.Color.green())
-                                await client.send_message(channel, author.mention, embed=embed)
-                            else:
-                                embed = discord.Embed(title='Error!', description='There wasn\'t a lunch notification scheduled at ' + time.strftime('%H:%M') + ' in this channel!\nTry $lunch info.', type='rich', color=discord.Color.red())
-                                await client.send_message(channel, author.mention, embed=embed)
-                            return
-                    save_list('lunch')
-                    embed = discord.Embed(title='Error!', description='There wasn\'t a lunch notification scheduled at ' + time.strftime('%H:%M') + ' in this channel!\nTry $lunch info.', type='rich', color=discord.Color.red())
-                    await client.send_message(channel, author.mention, embed=embed)
-            elif command[1] == 'info':
-                times = []
-                for i_time in range(len(lunch_ch)):
-                    if channel in lunch_ch[i_time][CHANNELS]:
-                        times.append(lunch_ch[i_time][TIME].strftime('%H:%M'))
-                #times = '\n'.join(times)
-                if len(times) == 0:
-                    description = 'There aren\'t any lunch notifications set for this channel.'
-                elif len(times) == 1:
-                    description = 'You will get lunch notifications at ' + times[0]
-                else:
-                    description = 'You will get lunch notifications at the following times:\n' + '\n'.join(times)
-                embed = discord.Embed(title='Here you go:', description=description, type='rich', color=discord.Color.blue())
-                await client.send_message(channel, author.mention, embed=embed)
-            elif command[1] == 'today':
-                await print_menu([channel], author, datetime.date.today())
-            elif command[1] == 'tomorrow':
-                await print_menu([channel], author, datetime.date.today() + datetime.timedelta(days=1))
-            elif command[1] == 'day':
-                if len(command) != 3:
-                    embed = discord.Embed(title='Error!', description='Please type in a date for your lunch request!', type='rich', color=discord.Color.red())
-                    await client.send_message(channel, author.mention, embed=embed)
-                else:
-                    try:
-                        date = command[2].split('-')
-                        day = int(date[len(date) - 1])
-                        if len(date) >= 2:
-                            month = int(date[len(date) - 2])
-                        else: month = datetime.date.today().month
-                        if len(date) == 3:
-                            year = int(date[0])
-                        else: year = datetime.date.today().year
-                    except ValueError:
-                        embed = discord.Embed(title='Error!', description='Please type in a valid date!', type='rich', color=discord.Color.red())
-                        await client.send_message(channel, author.mention, embed=embed)
-                        return
-                    await print_menu([channel], author, datetime.date(year, month, day))
-        elif command[0] == '#subs' and False:
+
+"""
+        elif command[0] == '$subs' and False:
             if len(command) == 1:
                 embed = discord.Embed(title='Available commands for $subs:', type='rich', description='on morning or evening\noff morning or evening\ntoday\ntomorrow\nnext\nday YYYY-MM-DD or MM-DD or DD\ninfo', color=discord.Color.blue())
                 await client.send_message(channel, author.mention, embed=embed)
@@ -315,6 +344,8 @@ async def on_message(message):
                     await client.send_message(channel, author.mention, embed=embed)
                 else:
                     pass
+"""
+
 
 print('Starting...')
 
@@ -327,5 +358,3 @@ finally:
     client.loop.close()
     print('Finished.')
 
-
-'test'
