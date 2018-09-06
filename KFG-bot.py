@@ -7,47 +7,45 @@ import urllib.request
 import xml.etree.ElementTree as ET
 import json
 import signal
-from enum import Enum
 
 
 def sigterm_handler(signal, stackframe):
   raise KeyboardInterrupt
-
 signal.signal(signal.SIGTERM, sigterm_handler) # graceful stop
 
+
 client = discord.client.Client()
-
-
-# lunch variables & constants
 autoSendTask = None
-TIME = 'TIME'
-CHANNELS = 'CHANNELS'
+
+
+# constants
+LUNCH_URL = 'https://naplo.karinthy.hu/app/interface.php?view=v_canteen_export&day={date!s}' 
+SUBST_URL = 'https://admin.karinthy.hu/api/substitutions?day={date!s}'
 STATE_FILE = 'state.json'
-LUNCH_URL = 'https://naplo.karinthy.hu/app/interface.php?view=v_canteen_export&day=' 
-schedule = [] # [{TIME:time, CHANNELS[[channels]...]}]
-formatOptions = []
-
-
-#MORNING = 'morning'
-#EVENING = 'evening'
-#CLASSINFO = 'classinfo'
-#CHANNEL = 'channel'
-#CLASS = 'class'
-#substitutions_schedule = {MORNING:[], EVENING:[], CLASSINFO:{}} # {MORNING:[channels], EVENING:[channels], CLASSINFO:{channel_ids:class_ids}}
+## state: {AUTO_SEND:[{ISOTIME:isotime, CHANNEL_IDS:[{CHANNEL_ID:channelId, SEND_LUNCH:bool, SEND_SUBST:bool}, ...]}, ...], AUTO_SUBST:[channelID, ...], CLASSOF:{channelId:class, ...}, COUNTDOWN:[{CHANNEL_ID:channelId, MSG_ID:msgId}, ...]}
+AUTO_SEND = 'autoSend'
+AUTO_SUBST = 'autoSubst'
+CLASSOF = 'classOf'
+COUNTDOWN = 'countdown'
+ISOTIME = 'isotime'
+CHANNEL_IDS = 'channelIDs'
+CHANNEL_ID = 'channelID'
+SEND_LUNCH = 'sendLunch'
+SEND_SUBST = 'sendSubst'
+MSG_ID = 'msgID'
 
 
 def saveState(): # export current state to state.json
   stateFile = open(STATE_FILE, 'w') # open file for writing
-  json.dump(schedule, stateFile)
+  json.dump(state, stateFile)
   stateFile.close()
 
 
 def loadState(): # import schedules saved in jsons
-  global schedule
-  global formatOptions
+  global stat
   try:
     with open(STATE_FILE, 'r') as stateFile: # open file for reading
-      schedule = json.load(stateFile)
+      state = json.load(stateFile)
   except FileNotFoundError:
     pass
   except json.decoder.JSONDecodeError as e:
@@ -65,9 +63,9 @@ async def sendMsgError(channel, message):
   await channel.send(embed=embed)
 
 
-async def helpAll(channel, args):
-  embed = discord.Embed(title='Available commands for KFG-bot:', type='rich',
-      description='lunch [...]\nping [delay]', color=discord.Color.blue())
+async def help(channel, args):
+  embed = discord.Embed(title='Available commands:', type='rich',
+      description='lunch [...]\nsubst [...]\nping [delay [DELAY]]', color=discord.Color.blue())
   await channel.send(embed=embed)
 
 
@@ -106,48 +104,105 @@ def formatLunch(rawlunch, date):
     return discord.Embed(title=getLunchMotd(date), type='rich', color=discord.Color.blue(), description=rawlunch) # if lunch formatting failed, just print it out unformatted
 
 
-async def printMenu(channels, date, auto=False): # print menu of [date] to [channels]
-  menu_xml = urllib.request.urlopen(LUNCH_URL + date.isoformat()).read().decode('utf-8') # get menu as an xml
+def getMenuEmbed(date):
+  menu_xml = urllib.request.urlopen(LUNCH_URL.format(date=date)).read().decode('utf-8') # get menu as an xml
   root = ET.fromstring(menu_xml) # parse it
-  lunch = root[2].text # get the relevant part
-  if lunch == None:
-    if not auto: # only send error message on manual query
-      await sendMsgError(channels[0], 'The lunch for ' + date.isoformat() + ' isn\'t available yet/anymore, or the lunch isn\'t available for the specified date.')
-  else:
-    embed = formatLunch(lunch, date)
-    for channel in channels:
-      await client.get_channel(channel).send(embed=embed)
+  rawlunch = root[2].text # get the relevant part
+  if rawlunch == None:
+    return None
+  return formatLunch(rawlunch, date)
 
 
-async def autoSend():
-  now = datetime.datetime.now()
-  if datatime.time.fromisoformat(schedule[-1][TIME]) >= now.time(): # find which time is next
-    for index in range(len(schedule) - 1): #TODO this probably does not work at all
-      if datetime.time.fromisoformat(schedule[index][TIME]) > now.time(): break
-  else:
-    index = 0
+def getTime(index):
+  return datetime.time.fromisoformat(state[AUTO_SEND][index][ISOTIME])
+
+
+def getIndex(time): 
+  bot = 0
+  top = len(state[AUTO_SEND]) - 1
+  if time < getTime(bot):
+    return bot
+  if getTime(top) < time:
+    return top + 1
   while True:
-    time = datetime.time.fromisoformat(schedule[index][TIME])
-    diff = (datetime.datetime.combine(now.date(), time)
-        - now # calculate time to wait
-        - datetime.timedelta(seconds=30)) # stop sooner than the desired time
-    await asyncio.sleep(diff.seconds) # wait (up to a day -> inaccurate)
-    now = datetime.datetime.now()
-    diff = datetime.datetime.combine(now.date(), time) - now # recalculate the small difference
-    await asyncio.sleep(diff.seconds) # wait (small amount of time -> accurate)
-    now = datetime.datetime.now()
-    print('Printing lunch to ', schedule[index][CHANNELS])
-    if now.time() > datetime.time(15, 00):
-      await printMenu(schedule[index][CHANNELS], datetime.date.today() + datetime.timedelta(days=1), auto=True)
+    avg = (top + bot) / 2
+    if getTime(avg) == time:
+      return avg
+    elif getTime(avg) < time:
+      top = avg
     else:
-      await printMenu(schedule[index][CHANNELS], datetime.date.today(), auto = True)
-    index = (index + 1) % len(schedule)
+      bot = avg
+    if top - bot == 1:
+      return top
 
+
+async def autoSend(): #TODO most certainly needs fixing
+  i = getIndex(datetime.datetime.now())
+  while True:
+    now = datetime.datetime.now()
+    nextTime = datetime.datetime.combine(datetime.today(), getTime(i))
+    if i == len(state[AUTO_SEND]):
+      i = 0
+      nextTime += datetime.timedelta(days=1)
+    #TODO check for new substitutes
+    if nextTime - now > datetime.timedelta(seconds=30*3600):
+      await asyncio.sleep(30*3600)
+      continue
+    await asyncio.sleep((nextTime - now).seconds)
+    now = datetime.datetime.now()
+    if now.time() > datetime.time(15, 00): #TODO print substitutions too
+      menuEmbed = getMenuEmbed(datetime.date.today() + datetime.timedelta(days=1))
+      #substEmbed = 
+    else:
+      menuEmbed = getMenuEmbed(datetime.date.today())
+      #substEmbed = 
+    for stuff in state[AUTO_SEND][i]: #TODO find a better name for stuff
+      if stuff[SEND_LUNCH] and menuEmbed != None:
+        await client.get_channel(stuff[CHANNEL_ID]).send(embed=menuEmbed)
+#      if stuff[SEND_SUBST] and substEmbed != none:
+#        await client.get_channel(stuff[CHANNEL_ID]).send(embed=subsdEmbed)
+    i += 1
 
 async def lunchHelp(channel, args): # lunch
   embed = discord.Embed(title='Available subcommands for lunch:', type='rich',
-      description='on HH:MM or HH\noff HH:MM or HH\ntoday\ntomorrow\nday YYYY-MM-DD or MM-DD or DD\ninfo', color=discord.Color.blue())
-  await channel.send(embed=embed)
+      description='on HH[:MM]\noff HH[:MM]\ntoday\ntomorrow\nday [[YYYY-]MM-]DD\ninfo', color=discord.Color.blue())
+  await channel.send(embd=embed)
+
+
+def parseTime(stringTime):
+  try:
+    splitTime = stringTime.split(':')
+    hour = int(splitTime[0])
+    if len(splitTime) == 2:
+      minute = int(splitTime[1])
+    else:
+      minute = 0
+    return datetime.time(hour, minute)
+  except ValueError:
+    return None
+
+
+def setStuff(time, *, sendLunch=None, sendSubst=None): # TODO find a better name for this too
+  index = getIndex(time)
+  if index = len(state[AUTO_SEND]):
+    state[AUTO_SEND].append({CHANNEL_ID = channel.id, SEND_LUNCH = bool(sendLunch), SEND_SUBST = bool(sendSubst)})
+  else:
+    if state[AUTO_SEND][index][ISOTIME] == time.isoformat():
+      for i in range(len(state[AUTO_SEND][index][CHANNEL_IDS])):
+        if state[AUTO_SEND][index][CHANNEL_IDS][i][CHANNEL_ID] == channel.id:
+          if state[AUTO_SEND][index][CHANNEL_IDS][i][SEND_LUNCH]:
+            sendMsgError(channel, 'lunch notifications are already enabled for ' + time.strftime('%H:%M') + '!')
+            return
+          else:
+            state[AUTO_SEND][index][CHANNEL_IDS][i][SEND_LUNCH] = True
+      if i == len(state[AUTO_SEND][index][CHANNEL_IDS]):
+        state[AUTO_SEND][index][CHANNEL_IDS].append({CHANNEL_ID:channel.id, SEND_LUNCH:True, SEND_SUBST:False})
+    else:
+      state[AUTO_SEND].insert(index, {ISOTIME:time.isoformat(), CHANNEL_IDS:[{CHANNEL_ID:channel.id, SEND_LUNCH:True, SEND_SUBST:False}})
+  save_state()
+  if autoSendTask != None:
+    autoSendTask.cancel()
+  autoSendTask = client.loop.create_task(autoSend())
 
 
 async def lunchOn(channel, args): # lunch on
@@ -155,35 +210,10 @@ async def lunchOn(channel, args): # lunch on
     await sendMsgError(channel, 'Please type in a time for the lunch notifications!')
     return
   global autoSendTask 
-  time = args[0]
-  try:
-    hour = int(time.split(':')[0])
-    if len(time.split(':')) == 2:
-      minute = int(time.split(':')[1])
-    else:
-      minute = 0
-    time = datetime.time(hour, minute)
-  except ValueError:
-    await sendMsgError(channel, 'Please type in a valid time')
+  time = getTime(args[0])
+  if time == None:
+    await sendMsgError(channel, 'Please type in a valid time.')
     return
-  if len(schedule) == 0: #TODO this thing is complete bullshit
-    schedule.append({TIME:time, CHANNELS:[channel]})
-  else:
-    for i_time in range(len(schedule)):
-      if schedule[i_time][TIME] == time:
-        if not channel in schedule[i_time][CHANNELS]:
-          schedule[i_tme][CHANNELS].append(cahnnel)
-        break
-      if schedule[i_time][TIME] > time:
-        schedule.insert(i_time, {TIME:time, CHANNELS:[channel]})
-        break
-      if i_time == len(schedule) - 1:
-        schedule.append({TIME:time, CHANNELS:[channel]})
-        break
-  save_state()
-  if autoSendTask != None:
-    autoSendTask.cancel()
-  autoSendTask = client.loop.create_task(autoSend())
   await sendMsgSuccess(channel, 'You have enabled lunch notifications for this channel! You will get them every day at ' + time.strftime('%H:%M'))
 
 
@@ -221,11 +251,8 @@ async def lunchOff(channel, args): # lunch off
 
 async def lunchInfo(channel, args): # lunch info
   times = []
-  print(channel.id)
   for i in range(len(schedule)):
-    print(schedule[i][CHANNELS])
     if channel.id in schedule[i][CHANNELS]:
-      print("alma")
       times.append(datetime.time.fromisoformat(schedule[i][TIME]).strftime('%H:%M'))
   if len(times) == 0:
     description = 'There aren\'t any lunch notifications set for this channel.'
@@ -269,6 +296,48 @@ async def lunchDay(channel, args): # $lunch day
   await printMenu([channel.id], date)
 
 
+async def substHelp(channel, args):
+  embed = discord.Embed(title='Available subcommands for subst:', type='rich',
+      description='on [HH[:MM]]\noff [HH[:MM]]\ntoday\ntomorrow\nday [[YYYY-]MM-]DD\ninfo', color=discord.Color.blue())
+  await channel.send(embed=embed)
+
+
+async def substOn(channel, args):
+  if len(args) == 0:
+    return
+  global autoSendTask 
+  time = args[0]
+  try:
+    hour = int(time.split(':')[0])
+    if len(time.split(':')) == 2:
+      minute = int(time.split(':')[1])
+    else:
+      minute = 0
+    time = datetime.time(hour, minute)
+  except ValueError:
+    await sendMsgError(channel, 'Please type in a valid time')
+    return
+  if len(schedule) == 0: #TODO this thing is complete bullshit
+    schedule.append({TIME:time, CHANNELS:[channel]})
+  else:
+    for i_time in range(len(schedule)):
+      if schedule[i_time][TIME] == time:
+        if not channel in schedule[i_time][CHANNELS]:
+          schedule[i_tme][CHANNELS].append(cahnnel)
+        break
+      if schedule[i_time][TIME] > time:
+        schedule.insert(i_time, {TIME:time, CHANNELS:[channel]})
+        break
+      if i_time == len(schedule) - 1:
+        schedule.append({TIME:time, CHANNELS:[channel]})
+        break
+  save_state()
+  if autoSendTask != None:
+    autoSendTask.cancel()
+  autoSendTask = client.loop.create_task(autoSend())
+  await sendMsgSuccess(channel, 'You have enabled lunch notifications for this channel! You will get them every day at ' + time.strftime('%H:%M'))
+
+
 async def ping(channel, args): # ping [delay]
   if len(args) == 1:
     try:
@@ -287,8 +356,8 @@ async def on_ready():
 
 
 commands = {
-  '': helpAll,
-  'help': helpAll,
+  '': help,
+  'help': help,
   'lunch': lunchHelp,
   'lunch help': lunchHelp,
   'lunch on': lunchOn,
@@ -297,6 +366,7 @@ commands = {
   'lunch today': lunchToday,
   'lunch tomorrow': lunchTomorrow,
   'lunch day': lunchDay,
+  'ping': ping }
   'ping delay': ping }
 
 
