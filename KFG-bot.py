@@ -333,7 +333,7 @@ async def printLunch(channel, date):
 
 
 async def lunchToday(channel, args): # lunch today
-  await printLunch(channel, datetime.datetime.today())
+  await printLunch(channel, datetime.date.today())
 
 
 async def substToday(channel, args): # lunch today
