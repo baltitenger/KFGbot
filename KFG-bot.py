@@ -135,6 +135,7 @@ def getIndex(time):
 
 async def autoSend(): #TODO needs redoing
   i = getIndex(datetime.datetime.now().time())
+  print('autoSend started')
   while True:
     now = datetime.datetime.now()
     if i == len(state[AUTO_SEND]):
@@ -144,9 +145,11 @@ async def autoSend(): #TODO needs redoing
     else:
       nextTime = datetime.datetime.combine(datetime.date.today(), getTime(i))
     #TODO check for new substitutes
-    if nextTime - now > datetime.timedelta(seconds=30 * 3600):
+    if nextTime - now > datetime.timedelta(seconds=30 * 60):
+      print('waiting 30 minutes')
       await asyncio.sleep(30 * 3600)
       continue
+    print((nextTime - now).seconds, 's to the next print.')
     await asyncio.sleep((nextTime - now).seconds)
     now = datetime.datetime.now()
     if now.time() > datetime.time(15, 00): #TODO print substitutions too
@@ -155,9 +158,12 @@ async def autoSend(): #TODO needs redoing
     else:
       menuEmbed = getMenuEmbed(datetime.date.today())
       #substEmbed = 
+    print(0)
     for channelID, send in state[AUTO_SEND][i][CHANNELS].items():
+      print(1)
       if send[LUNCH] and menuEmbed != None:
-        await client.get_channel(channelID).send(embed=menuEmbed)
+        print(2)
+        await client.get_channel(int(channelID)).send(embed=menuEmbed)
 #      if send[SUBST] and substEmbed != none:
 #        await client.get_channel(stuff[CHANNEL_ID]).send(embed=subsdEmbed)
     i += 1
