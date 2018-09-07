@@ -28,7 +28,7 @@ AUTO_SUBST = 'autoSubst'
 CLASSOF = 'classOf'
 COUNTDOWN = 'countdown'
 ISOTIME = 'isotime'
-CHANNELS = 'channelIDs'
+CHANNELS = 'channels'
 LUNCH = 'lunch'
 SUBST = 'subst'
 state = {AUTO_SEND:[], AUTO_SUBST:[], CLASSOF:{}, COUNTDOWN:{}}
@@ -133,9 +133,9 @@ def getIndex(time):
       return top
 
 
-async def autoSend(): #TODO needs redoing
+async def autoSend():
   i = getIndex(datetime.datetime.now().time())
-  print('autoSend started')
+  print('autoSend started...')
   while True:
     now = datetime.datetime.now()
     if i == len(state[AUTO_SEND]):
@@ -146,11 +146,12 @@ async def autoSend(): #TODO needs redoing
       nextTime = datetime.datetime.combine(datetime.date.today(), getTime(i))
     #TODO check for new substitutes
     if nextTime - now > datetime.timedelta(seconds=30 * 60):
-      print('waiting 30 minutes')
+      print('Waiting 30 minutes...')
       await asyncio.sleep(30 * 3600)
       continue
-    print((nextTime - now).seconds, 's to the next print.')
+    print((nextTime - now).seconds, 'seconds to the next print.')
     await asyncio.sleep((nextTime - now).seconds)
+    print('Printing...')
     now = datetime.datetime.now()
     if now.time() > datetime.time(15, 00): #TODO print substitutions too
       menuEmbed = getMenuEmbed(datetime.date.today() + datetime.timedelta(days=1))
@@ -158,11 +159,8 @@ async def autoSend(): #TODO needs redoing
     else:
       menuEmbed = getMenuEmbed(datetime.date.today())
       #substEmbed = 
-    print(0)
     for channelID, send in state[AUTO_SEND][i][CHANNELS].items():
-      print(1)
       if send[LUNCH] and menuEmbed != None:
-        print(2)
         await client.get_channel(int(channelID)).send(embed=menuEmbed)
 #      if send[SUBST] and substEmbed != none:
 #        await client.get_channel(stuff[CHANNEL_ID]).send(embed=subsdEmbed)
@@ -178,7 +176,7 @@ async def help(channel, args):
 async def lunchHelp(channel, args): # lunch
   embed = discord.Embed(title='Available subcommands for lunch:', type='rich',
       description='on HH[:MM]\noff HH[:MM]\ntoday\ntomorrow\nday [[YYYY-]MM-]DD\ninfo', color=discord.Color.blue())
-  await channel.send(embd=embed)
+  await channel.send(embed=embed)
 
 
 async def substHelp(channel, args):
@@ -325,6 +323,7 @@ async def substInfo(channel, args):
 
 
 async def printLunch(channel, date):
+  await channel.trigger_typing()
   menuEmbed = getMenuEmbed(date)
   if menuEmbed == None:
     await sendMsgError(channel, 'The lunch for ' + date.isoformat() + 'isn\'t available yet/anymore, or there\'s no lunch on the date specified.')
@@ -430,13 +429,13 @@ commands = {
 
 @client.event
 async def on_message(message):
-  if not client.user in message.mentions:
-    return
-  command = ' '.join(message.content.split(' ')[1:3])
-  args = message.content.split(' ')[3:]
   channel = message.channel
+  if message.author == client.user or not (client.user in message.mentions or type(channel) == discord.channel.DMChannel):
+    return
+  x = client.user in message.mentions
+  command = ' '.join(message.content.split(' ')[x:x+2])
+  args = message.content.split(' ')[x+2:]
   if command in commands: # check if message is a command
-    await channel.trigger_typing()
     await commands[command](channel, args) # run the command
   else:
     await sendMsgError(channel, 'Unknown command.')
