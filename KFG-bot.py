@@ -167,17 +167,21 @@ class Lunch():
       lunch = rawlunch.split('\n\n')
       a = lunch[0].split('\n')[1:]
       b = lunch[1].split('\n')[1:]
+      c = lunch[2].split('\n')[1:]
       soup = []
       while a[0] == b[0]: # separate soup from the rest
         soup.append(a.pop(0))
         b.pop(0)
+        c.pop(0)
       a = '\n'.join(a)
       b = '\n'.join(b)
+      c = '\n'.join(c)
       soup = '\n'.join(soup)
       return (discord.Embed(title=Lunch.getMotd(date), type='rich', color=discord.Color.blue())
           .add_field(name='Leves:', value=soup)
           .add_field(name='A menü:', value=a)
           .add_field(name='B menü:', value=b)
+          .add_field(name='C menü:', value=c)
           .set_footer(text='Have fun!'))
     except:
       return discord.Embed(title=Lunch.getMotd(date), type='rich', color=discord.Color.blue(), description=rawlunch) # if lunch formatting failed, just print it out unformatted
@@ -364,7 +368,7 @@ async def autoSend():
     #TODO check for new substitutes
     if nextTime - now > datetime.timedelta(seconds=30 * 60):
       print('Waiting 30 minutes...')
-      await asyncio.sleep(30 * 3600)
+      await asyncio.sleep(30 * 60)
       continue
     print((nextTime - now).seconds, 'seconds to the next print.')
     await asyncio.sleep((nextTime - now).seconds)
