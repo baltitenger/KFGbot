@@ -436,7 +436,7 @@ commands = {
   ' ': help,
   'help': help,
   'ping': ping,
-  'plot': plot,
+#  'plot': plot,
   'mention': mention, }
 
 commandsWSub = {
