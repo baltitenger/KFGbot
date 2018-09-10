@@ -358,7 +358,7 @@ async def autoSend():
     #TODO check for new substitutes
     if nextTime - now > datetime.timedelta(seconds=30 * 60):
       print('Waiting 30 minutes...')
-      await asyncio.sleep(30 * 3600)
+      await asyncio.sleep(30 * 60)
       continue
     print((nextTime - now).seconds, 'seconds to the next print.')
     await asyncio.sleep((nextTime - now).seconds)
