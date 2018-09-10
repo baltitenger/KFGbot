@@ -7,10 +7,10 @@ import urllib.request
 import xml.etree.ElementTree as ET
 import json
 
-import matplotlib.pyplot as plt
-import numpy as np
-import numexpr
-import io
+# import matplotlib.pyplot as plt
+# import numpy as np
+# import numexpr
+# import io
 
 
 client = discord.client.Client()
@@ -404,21 +404,21 @@ async def ping(channel, args): # ping [delay]
   await channel.send("pong") 
 
 
-domain = 10
-accuracy = 0.1
-async def plot(channel, args): # can throw exception, unhandled for now
-  function = ''.join(args)
-  plt.close()
-  plt.axes((0, 0, 1, 1), frameon=False, aspect='equal')
-  plt.ylim(-domain / 2, domain/2)
-  x = np.arange(-(domain / 2 + accuracy / 2), (domain / 2 + accuracy / 2), accuracy)
-  plt.plot(x, numexpr.evaluate(function))
-  plt.plot(x, 0*x, color='black')
-  plt.axvline(x=0, color='black')
-  buf = io.BytesIO()
-  plt.savefig(buf, bbox_inches='tight', format='png')
-  buf.seek(0)
-  await channel.send("Plot of `{}`:".format(function), file=discord.File(buf, filename="plot.png"))
+# domain = 10
+# accuracy = 0.1
+# async def plot(channel, args): # can throw exception, unhandled for now
+#   function = ''.join(args)
+#   plt.close()
+#   plt.axes((0, 0, 1, 1), frameon=False, aspect='equal')
+#   plt.ylim(-domain / 2, domain/2)
+#   x = np.arange(-(domain / 2 + accuracy / 2), (domain / 2 + accuracy / 2), accuracy)
+#   plt.plot(x, numexpr.evaluate(function))
+#   plt.plot(x, 0*x, color='black')
+#   plt.axvline(x=0, color='black')
+#   buf = io.BytesIO()
+#   plt.savefig(buf, bbox_inches='tight', format='png')
+#   buf.seek(0)
+#   await channel.send("Plot of `{}`:".format(function), file=discord.File(buf, filename="plot.png"))
 
 
 async def mention(channel, args):
