@@ -7,6 +7,11 @@ import urllib.request
 import xml.etree.ElementTree as ET
 import json
 
+import matplotlib.pyplot as plt
+import numpy as np
+import numexpr
+import io
+
 
 client = discord.client.Client()
 autoSendTask = None
@@ -22,13 +27,14 @@ CLASSOF = 'classOf'
 COUNTDOWN = 'countdown'
 ISOTIME = 'isotime'
 CHANNELS = 'channels'
+NO_MENTION = 'noMention'
 LUNCH = 'lunch'
 SUBST = 'subst'
-state = {AUTO_SEND:[], AUTO_SUBST:[], CLASSOF:{}, COUNTDOWN:{}}
+state = {AUTO_SEND:[], AUTO_SUBST:[], CLASSOF:{}, COUNTDOWN:{}, NO_MENTION:[]}
 ## state: {AUTO_SEND:[{ISOTIME:isotime, CHANNELS:{channelId:{LUNCH:bool, SUBST:bool}, ...}}, ...], AUTO_SUBST:[channelID, ...], CLASSOF:{channelId:class, ...}, COUNTDOWN:{channelId:msgId, ...}}
 
 
-class util():
+class Util():
   def timeAt(index):
     if len(state[AUTO_SEND]) == 0:
       return None
@@ -41,15 +47,15 @@ class util():
       return 0
     bot = 0
     top = len(state[AUTO_SEND]) - 1
-    if time < util.timeAt(bot):
+    if time < Util.timeAt(bot):
       return bot
-    if util.timeAt(top) < time:
+    if Util.timeAt(top) < time:
       return top + 1
     while True:
       avg = (top + bot) // 2
-      if util.timeAt(avg) == time:
+      if Util.timeAt(avg) == time:
         return avg
-      elif util.timeAt(avg) < time:
+      elif Util.timeAt(avg) < time:
         bot = avg
       else:
         top = avg
@@ -88,7 +94,7 @@ class util():
 
 
   def setStuff(time, channel, thingToSet, to): # TODO find a better name for this too
-    index = util.indexOf(time)
+    index = Util.indexOf(time)
     strID = str(channel.id)
     if index < len(state[AUTO_SEND]) and state[AUTO_SEND][index][ISOTIME] == time.isoformat():
       if strID in state[AUTO_SEND][index][CHANNELS]:
@@ -105,7 +111,7 @@ class util():
       state[AUTO_SEND][index][CHANNELS].pop(strID)
       if len(state[AUTO_SEND][index][CHANNELS]) == 0:
         state[AUTO_SEND].pop(index)
-    util.saveState()
+    Util.saveState()
     global autoSendTask
     if autoSendTask != None:
       autoSendTask.cancel()
@@ -192,7 +198,7 @@ class Lunch():
     await channel.trigger_typing()
     lunchEmbed = Lunch.generateEmbed(date)
     if lunchEmbed == None:
-      await util.sendError(channel, 'The lunch for ' + date.isoformat() + ' isn\'t available yet/anymore, or there\'s no lunch on the date specified.')
+      await Util.sendError(channel, 'The lunch for ' + date.isoformat() + ' isn\'t available yet/anymore, or there\'s no lunch on the date specified.')
     else:
       await channel.send(embed=lunchEmbed)
 
@@ -205,37 +211,37 @@ class Lunch():
 
   async def on(channel, args): # lunch on
     if len(args) < 1:
-      await util.sendError(channel, 'Please type in a time for the lunch notifications.')
+      await Util.sendError(channel, 'Please type in a time for the lunch notifications.')
       return
-    time = util.parseTime(args[0])
+    time = Util.parseTime(args[0])
     if time == None:
-      await util.sendError(channel, 'Please type in a valid time.')
+      await Util.sendError(channel, 'Please type in a valid time.')
       return
-    if util.setStuff(time, channel, LUNCH, True):
-      await util.sendSuccess(channel, 'You have enabled lunch notifications for this channel! You will get them every day at ' + time.strftime('%H:%M') + '.')
+    if Util.setStuff(time, channel, LUNCH, True):
+      await Util.sendSuccess(channel, 'You have enabled lunch notifications for this channel! You will get them every day at ' + time.strftime('%H:%M') + '.')
     else:
-      await util.sendError(channel, 'Lunch notifications are already enabled for this channel at ' + time.strftime('%H:%M') + '.')
+      await Util.sendError(channel, 'Lunch notifications are already enabled for this channel at ' + time.strftime('%H:%M') + '.')
 
 
   async def off(channel, args): # lunch off
     if len(args) < 1:
-      await util.sendError(channel, 'Please type in a time to remove.')
+      await Util.sendError(channel, 'Please type in a time to remove.')
       return
-    time = util.parseTime(args[0])
+    time = Util.parseTime(args[0])
     if time == None:
-      await util.sendError(channel, 'Please type in a valid time.')
+      await Util.sendError(channel, 'Please type in a valid time.')
       return
-    if util.setStuff(time, channel, LUNCH, False):
-      await util.sendSuccess(channel, 'You have turned off lunch notifications for this channel at ' + time.strftime('%H:%M') + '.')
+    if Util.setStuff(time, channel, LUNCH, False):
+      await Util.sendSuccess(channel, 'You have turned off lunch notifications for this channel at ' + time.strftime('%H:%M') + '.')
     else:
-      await util.sendError(channel, 'There were no lunch notifications scheduled at ' + time.strftime('%H:%M') + ' in this channel.')
+      await Util.sendError(channel, 'There were no lunch notifications scheduled at ' + time.strftime('%H:%M') + ' in this channel.')
 
 
   async def info(channel, args): # lunch info
     times = []
     for i in range(len(state[AUTO_SEND])):
       if str(channel.id) in state[AUTO_SEND][i][CHANNELS] and state[AUTO_SEND][i][CHANNELS][str(channel.id)][LUNCH]:
-        times.append(util.timeAt(i).strftime('%H:%M'))
+        times.append(Util.timeAt(i).strftime('%H:%M'))
     if len(times) == 0:
       description = 'There aren\'t any lunch notifications set for this channel.'
     elif len(times) == 1:
@@ -257,11 +263,11 @@ class Lunch():
 
   async def day(channel, args): # $lunch day
     if len(args) != 1:
-      await util.sendError(channel, 'Please type in a date for your lunch request.')
+      await Util.sendError(channel, 'Please type in a date for your lunch request.')
       return
-    date = util.parseDate(args[0])
+    date = Util.parseDate(args[0])
     if date == None:
-      await util.sendError(channel, 'Please type in a valid date.')
+      await Util.sendError(channel, 'Please type in a valid date.')
       return
     await Lunch.print(channel, date)
 
@@ -275,37 +281,37 @@ class Subst():
 
   async def on(channel, args): # TODO add instant notify
     if len(args) < 1:
-      await util.sendError(channel, 'Please type in a time to schedule substitution digests for.')
+      await Util.sendError(channel, 'Please type in a time to schedule substitution digests for.')
       return
-    time = util.parseTime(args[0])
+    time = Util.parseTime(args[0])
     if time == None:
-      await util.sendError(channel, 'Please type in a valid time.')
+      await Util.sendError(channel, 'Please type in a valid time.')
       return
-    if util.setStuff(time, channel, LUNCH, False):
-      await util.sendSuccess(channel, 'You have enabled scheduled substitution digests for this channel! You will get them every day at ' + time.strftime('%H:%M') + '.')
+    if Util.setStuff(time, channel, LUNCH, False):
+      await Util.sendSuccess(channel, 'You have enabled scheduled substitution digests for this channel! You will get them every day at ' + time.strftime('%H:%M') + '.')
     else:
-      await util.sendError(channel, 'Scheduled substitution digests are already enabled for this channel at ' + time.strftime('%H:%M') + '.')
+      await Util.sendError(channel, 'Scheduled substitution digests are already enabled for this channel at ' + time.strftime('%H:%M') + '.')
 
 
   async def off(channel, args): # lunch off
     if len(args) < 1:
-      await util.sendError(channel, 'Please type in a time to remove.')
+      await Util.sendError(channel, 'Please type in a time to remove.')
       return
-    time = util.parseTime(args[0])
+    time = Util.parseTime(args[0])
     if time == None:
-      await util.sendError(channel, 'Please type in a valid time.')
+      await Util.sendError(channel, 'Please type in a valid time.')
       return
-    if util.setStuff(time, channel, LUNCH, True):
-      await util.sendSuccess(channel, 'You have turned off scheduled substitution digests for this channel at ' + time.strftime('%H:%M') + '.')
+    if Util.setStuff(time, channel, LUNCH, True):
+      await Util.sendSuccess(channel, 'You have turned off scheduled substitution digests for this channel at ' + time.strftime('%H:%M') + '.')
     else:
-      await util.sendError(channel, 'There were no substitution digests scheduled at ' + time.strftime('%H:%M') + ' in this channel.')
+      await Util.sendError(channel, 'There were no substitution digests scheduled at ' + time.strftime('%H:%M') + ' in this channel.')
 
 
   async def info(channel, args):
     times = []
     for i in range(len(state[AUTO_SEND])):
       if str(channel.id) in state[AUTO_SEND][i][CHANNELS] and state[AUTO_SEND][i][CHANNELS][str(channel.id)][SUBST]:
-        times.append(util.timeAt(i).strftime('%H:%M'))
+        times.append(Util.timeAt(i).strftime('%H:%M'))
     if len(times) == 0:
       if str(channel.id) in state[AUTO_SUBST]:
         description = 'You will get substitution notifications right when they get on the board.'
@@ -337,21 +343,21 @@ class Subst():
 
   async def day(channel, args): # $lunch day
     if len(args) != 1:
-      await util.sendError(channel, 'Please type in a date for your substitution request.')
+      await Util.sendError(channel, 'Please type in a date for your substitution request.')
       return
-    date = util.parseDate(args[0])
+    date = Util.parseDate(args[0])
     if date == None:
-      await util.sendError(channel, 'Please type in a valid date.')
+      await Util.sendError(channel, 'Please type in a valid date.')
       return
     await channel.send(embed=await getSubstEmbed(date))
 
 
 async def autoSend():
   now = datetime.datetime.now()
-  i = util.indexOf(now.time())
+  i = Util.indexOf(now.time())
   print('autoSend started...')
   while True:
-    nextTime = datetime.datetime.combine(now.date(), util.timeAt(i))
+    nextTime = datetime.datetime.combine(now.date(), Util.timeAt(i))
     if i == len(state[AUTO_SEND]): # -> next time to send is tomorrow
       i = 0
       nextTime += datetime.timedelta(days=1)
@@ -381,7 +387,7 @@ async def autoSend():
 
 async def help(channel, args):
   embed = discord.Embed(title='Available commands:', type='rich',
-      description='lunch [...]\nsubst [...]\nping [delay]', color=discord.Color.blue())
+      description='lunch [...]\nsubst [...]\nping [delay]\nplot function\nmention', color=discord.Color.blue())
   await channel.send(embed=embed)
 
 
@@ -394,11 +400,40 @@ async def ping(channel, args): # ping [delay]
   await channel.send("pong") 
 
 
+domain = 10
+accuracy = 0.1
+async def plot(channel, args): # can throw exception, unhandled for now
+  function = ''.join(args)
+  plt.close()
+  plt.axes((0, 0, 1, 1), frameon=False, aspect='equal')
+  plt.ylim(-domain / 2, domain/2)
+  x = np.arange(-(domain / 2 + accuracy / 2), (domain / 2 + accuracy / 2), accuracy)
+  plt.plot(x, numexpr.evaluate(function))
+  plt.plot(x, 0*x, color='black')
+  plt.axvline(x=0, color='black')
+  buf = io.BytesIO()
+  plt.savefig(buf, bbox_inches='tight', format='png')
+  buf.seek(0)
+  await channel.send("Plot of `{}`:".format(function), file=discord.File(buf, filename="plot.png"))
+
+
+async def mention(channel, args):
+  if channel.id in state[NO_MENTION]:
+    state[NO_MENTION].remove(channel.id)
+    await Util.sendSuccess(channel, 'Mentioning the bot is now required.')
+  else:
+    state[NO_MENTION].append(channel.id)
+    await Util.sendSuccess(channel, 'Mentioning the bot id now optional.')
+  Util.saveState()
+
+
 commands = {
   '': help,
   ' ': help,
   'help': help,
-  'ping': ping, }
+  'ping': ping,
+  'plot': plot,
+  'mention': mention, }
 
 commandsWSub = {
   'lunch': Lunch,
@@ -425,7 +460,7 @@ async def on_ready():
 @client.event
 async def on_message(message):
   channel = message.channel
-  if message.author == client.user or not (client.user in message.mentions or type(channel) == discord.channel.DMChannel):
+  if message.author == client.user or not (client.user in message.mentions or type(channel) == discord.channel.DMChannel or channel.id in state[NO_MENTION]):
     return
   splitMessage = message.content.split(' ')
   if client.user in message.mentions:
@@ -442,12 +477,13 @@ async def on_message(message):
       args = splitMessage[2:]
       await getattr(commandsWSub[splitMessage[0]], splitMessage[1])(channel, args)
       return
-  await util.sendError(channel, 'Unknown command.')
+  if client.user in message.mentions:
+    await Util.sendError(channel, 'Unknown command.')
 
 
 print('Starting...')
 
-util.loadState()
+Util.loadState()
 
 try:
     with open('token') as f: token = f.readline().strip()
