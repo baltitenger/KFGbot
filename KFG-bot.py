@@ -357,10 +357,10 @@ class Subst():
 
 
 async def autoSend():
-  now = datetime.datetime.now()
-  i = Util.indexOf(now.time())
+  i = Util.indexOf(datetime.datetime.now().time())
   print('autoSend started...')
   while True:
+    now = datetime.datetime.now()
     nextTime = datetime.datetime.combine(now.date(), Util.timeAt(i))
     if i == len(state[AUTO_SEND]): # -> next time to send is tomorrow
       i = 0
@@ -385,7 +385,6 @@ async def autoSend():
         await client.get_channel(int(channelID)).send(embed=lunchEmbed)
 #      if send[SUBST] and substEmbed != none:
 #        await client.get_channel(stuff[CHANNEL_ID]).send(embed=subsdEmbed)
-    now = datetime.datetime.now()
     i += 1
 
 
