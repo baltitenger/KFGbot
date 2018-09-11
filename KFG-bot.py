@@ -7,9 +7,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 import json
 
-# import matplotlib.pyplot as plt
-# import numpy as np
-# import numexpr
+from subprocess import run
 # import io
 
 
@@ -20,6 +18,7 @@ autoSendTask = None
 # constants
 LUNCH_URL = 'https://naplo.karinthy.hu/app/interface.php?view=v_canteen_export&day={date}' 
 SUBST_URL = 'https://admin.karinthy.hu/api/substitutions?day={date}'
+PLOT_OPTS = 'set term png; set size ratio -1; set zeroaxis; set key off; set xrange [-10:10]; set yrange [-10:10]; plot {function}'
 STATE_FILE = 'state.json'
 AUTO_SEND = 'autoSend'
 AUTO_SUBST = 'autoSubst'
@@ -404,21 +403,10 @@ async def ping(channel, args): # ping [delay]
   await channel.send("pong") 
 
 
-# domain = 10
-# accuracy = 0.1
-# async def plot(channel, args): # can throw exception, unhandled for now
-#   function = ''.join(args)
-#   plt.close()
-#   plt.axes((0, 0, 1, 1), frameon=False, aspect='equal')
-#   plt.ylim(-domain / 2, domain/2)
-#   x = np.arange(-(domain / 2 + accuracy / 2), (domain / 2 + accuracy / 2), accuracy)
-#   plt.plot(x, numexpr.evaluate(function))
-#   plt.plot(x, 0*x, color='black')
-#   plt.axvline(x=0, color='black')
-#   buf = io.BytesIO()
-#   plt.savefig(buf, bbox_inches='tight', format='png')
-#   buf.seek(0)
-#   await channel.send("Plot of `{}`:".format(function), file=discord.File(buf, filename="plot.png"))
+async def plot(channel, args): # can throw exception, unhandled for now
+  function = ''.join(args)
+  plot = run(['gnuplot', '-e', PLOT_OPTS.format(function=function)], capture_output=True).stdout
+  await channel.send("Plot of `{}`:".format(function), file=discord.File(plot, filename="plot.png"))
 
 
 async def mention(channel, args):
@@ -436,7 +424,7 @@ commands = {
   ' ': help,
   'help': help,
   'ping': ping,
-#  'plot': plot,
+  'plot': plot,
   'mention': mention, }
 
 commandsWSub = {
