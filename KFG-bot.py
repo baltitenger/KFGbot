@@ -364,11 +364,11 @@ async def autoSend():
     if i == len(state[AUTO_SEND]): # -> next time to send is tomorrow
       i = 0
       nextTime += datetime.timedelta(days=1)
-    #TODO check for new substitutes
-    if nextTime - now > datetime.timedelta(seconds=30 * 60):
+    while nextTime - now > datetime.timedelta(seconds=30 * 60):
+      #TODO check for new substitutes
       print('Waiting 30 minutes...')
       await asyncio.sleep(30 * 60)
-      continue
+      now = datetime.datetime.now()
     print((nextTime - now).seconds, 'seconds to the next print.')
     await asyncio.sleep((nextTime - now).seconds)
     print('Printing...')
