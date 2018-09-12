@@ -146,6 +146,7 @@ class Util():
       print(e.msg)
 
 
+
 class Lunch():
   def getMotd(date): # get lunch motd depending on date queried
     if date == datetime.date.today():
@@ -205,7 +206,7 @@ class Lunch():
     else:
       await channel.send(embed=lunchEmbed)
 
-
+  
   async def help(channel, args): # lunch
     embed = discord.Embed(title='Available subcommands for lunch:', type='rich',
         description='on HH[:MM]\noff HH[:MM]\ntoday\ntomorrow\nday [[YYYY-]MM-]DD\ninfo', color=discord.Color.blue())
@@ -424,11 +425,11 @@ commands = {
   'help': help,
   'ping': ping,
   'plot': plot,
-  'mention': mention, }
-
-commandsWSub = {
+  'mention': mention,
   'lunch': Lunch,
-  'subst': Subst, }
+  'subst': Subst,
+  }
+
 
 subCommands = [
   'help',
@@ -437,7 +438,8 @@ subCommands = [
   'info',
   'today',
   'tomorrow',
-  'day', ]
+  'day',
+  ]
 
 
 @client.event
@@ -456,19 +458,20 @@ async def on_message(message):
   splitMessage = message.content.split(' ')
   if client.user in message.mentions:
     splitMessage.pop(0)
-  if splitMessage[0] in commands:
+  command = commands.get(splitMessage[0])
+  notFound = False
+  if command != None:
     args = splitMessage[1:]
-    await commands[splitMessage[0]](channel, args) # run the command
-    return
-  elif splitMessage[0] in commandsWSub:
-    if len(splitMessage) == 1:
-      await getattr(commandsWSub[splitMessage[0]], 'help')(channel, [])
-      return
-    elif splitMessage[1] in subCommands:
-      args = splitMessage[2:]
-      await getattr(commandsWSub[splitMessage[0]], splitMessage[1])(channel, args)
-      return
-  if client.user in message.mentions:
+    if isinstance(command, type):
+      if hasattr(command, args[0]):
+        await getattr(command, args[0])(channel, args[1:])
+      else:
+        notFound = True
+    else:
+      await command(channel, args)
+  else:
+    notFound = True
+  if notFound and client.user in message.mentions:
     await Util.sendError(channel, 'Unknown command.')
 
 
