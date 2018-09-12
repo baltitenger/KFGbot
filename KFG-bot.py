@@ -420,8 +420,6 @@ async def mention(channel, args):
 
 
 commands = {
-  '': help,
-  ' ': help,
   'help': help,
   'ping': ping,
   'plot': plot,
