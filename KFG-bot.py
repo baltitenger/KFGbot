@@ -29,9 +29,10 @@ CHANNELS = 'channels'
 NO_MENTION = 'noMention'
 LUNCH = 'lunch'
 SUBST = 'subst'
-state = {AUTO_SEND:[], AUTO_SUBST:[], CLASSOF:{}, COUNTDOWN:{}, NO_MENTION:[]}
-## state: {AUTO_SEND:[{ISOTIME:isotime, CHANNELS:{channelId:{LUNCH:bool, SUBST:bool}, ...}}, ...], AUTO_SUBST:[channelID, ...], CLASSOF:{channelId:class, ...}, COUNTDOWN:{channelId:msgId, ...}}
-
+KNOWN_SUBSTS = 'knownSubsts'
+state = {AUTO_SEND:[], AUTO_SUBST:[], CLASSOF:{}, COUNTDOWN:{}, NO_MENTION:[], KNOWN_SUBSTS:[]}
+## state: {AUTO_SEND:[{ISOTIME:isotime, CHANNELS:{channelId:{LUNCH:bool, SUBST:bool}, ...}}, ...], AUTO_SUBST:[channelID, ...], CLASSOF:{channelId:class, ...}, COUNTDOWN:{channelId:msgId, ...}, KNOWN_SUBSTS:[]}
+#TODO nyelvorak?
 
 class Util():
   def timeAt(index):
@@ -144,7 +145,6 @@ class Util():
     except json.decoder.JSONDecodeError as e:
       print('Invalid state.json!')
       print(e.msg)
-
 
 
 class Lunch():
@@ -277,6 +277,42 @@ class Lunch():
 
 
 class Subst():
+  def getMotd(date, diffOnly):
+    if diffOnly:
+      motd = 'Here are {}\'s new substitutions:'
+    else:
+      motd = 'Here are {}\'s substitutions:'
+    if datetime.date.today() == date:
+      return motd.format('today')
+    else:
+      return motd.format('tomorrow')
+
+
+  def format(substs, channelID, diffOnly=False):
+    motd = Subst.getMotd(datetime.date.fromisoformat(substs[0]['day']), diffOnly)
+    if not channelID in state[CLASSOF]:
+      embed = discord.Embed(title='Error!', type='rich', color=discord.Color.red(), description='Class not given!')
+      return  embed
+    classID = state[CLASSOF][channelID]
+    substEmbed = discord.Embed(title=motd, type='rich', color=discord.Color.blue())
+    empty = True
+    for s in substs:
+      if s['class'] == classID and (not diffOnly or s not in state[KNOWN_SUBSTS]):
+        empty = False
+        substEmbed.add_field(name=s['subject'], value='lesson {}\n{}\n{}\n~~{}~~\nroom {}'.format(
+          s['lesson'], s['comment'], s['substitutingTeacher'], s['missingTeacher'], s['room']))
+    if empty:
+      return None
+    return substEmbed
+
+
+  def downloadSubsts(date):
+    request = urllib.request.Request(SUBST_URL.format(date=date.isoformat()))
+    request.add_header('Accept', 'application/json')
+    with urllib.request.urlopen(request) as response:
+      return json.load(response)['substitutions']
+
+
   async def help(channel, args):
     embed = discord.Embed(title='Available subcommands for subst:', type='rich',
         description='on [HH[:MM]]\noff [HH[:MM]]\ntoday\ntomorrow\nday [[YYYY-]MM-]DD\ninfo', color=discord.Color.blue())
@@ -291,13 +327,13 @@ class Subst():
     if time == None:
       await Util.sendError(channel, 'Please type in a valid time.')
       return
-    if Util.setStuff(time, channel, LUNCH, False):
+    if Util.setStuff(time, channel, SUBST, True):
       await Util.sendSuccess(channel, 'You have enabled scheduled substitution digests for this channel! You will get them every day at ' + time.strftime('%H:%M') + '.')
     else:
       await Util.sendError(channel, 'Scheduled substitution digests are already enabled for this channel at ' + time.strftime('%H:%M') + '.')
 
 
-  async def off(channel, args): # lunch off
+  async def off(channel, args):
     if len(args) < 1:
       await Util.sendError(channel, 'Please type in a time to remove.')
       return
@@ -305,7 +341,7 @@ class Subst():
     if time == None:
       await Util.sendError(channel, 'Please type in a valid time.')
       return
-    if Util.setStuff(time, channel, LUNCH, True):
+    if Util.setStuff(time, channel, SUBST, False):
       await Util.sendSuccess(channel, 'You have turned off scheduled substitution digests for this channel at ' + time.strftime('%H:%M') + '.')
     else:
       await Util.sendError(channel, 'There were no substitution digests scheduled at ' + time.strftime('%H:%M') + ' in this channel.')
@@ -332,28 +368,40 @@ class Subst():
           description = 'You will get lunch notifications at the following times:\n' + '\n'.join(times) + '\nRight when they get on the board'
         else:
           description = 'You will get lunch notifications at the following times:\n' + '\n'.join(times)
+    if str(channel.id) in state[CLASSOF]:
+      description += "\nClass ID for this channel is {}".format(state[CLASSOF][str(channel.id)]) 
+    else:
+      description += "\nClass ID not set for this channel." 
     embed = discord.Embed(title='Lunch info:', description=description,
         type='rich', color=discord.Color.blue())
     await channel.send(embed=embed)
 
 
-  async def today(channel, args): # lunch today
-    await channel.send(embed=getSubstEmbed(datetime.date.today()))
+  async def print(channel, date):
+    await channel.trigger_typing()
+    substEmbed = Subst.format(Subst.downloadSubsts(date), str(channel.id))
+    if substEmbed == None:
+      embed = discord.Embed(title='There are no substitutions.', type='rich', color=discord.Color.blue())
+      await channel.send(embed=embed)
+    else:
+      await channel.send(embed=substEmbed)
 
 
-  async def tomorrow(channel, args): # $lunch tomorrow
-    await channel.send(embed=getSubstEmbed(datetime.date.today() + datetime.timedelta(days=1)))
+  async def today(channel, args):
+    await Subst.print(channel, datetime.date.today())
 
 
-  async def day(channel, args): # $lunch day
-    if len(args) != 1:
-      await Util.sendError(channel, 'Please type in a date for your substitution request.')
+  async def tomorrow(channel, args):
+    await Subst.print(channel, datetime.date.today() + datetime.timedelta(days=1))
+
+
+  async def setClass(channel, args):
+    if len(args) < 1:
+      await Util.sendError(channel, 'Please type in a time to remove.')
       return
-    date = Util.parseDate(args[0])
-    if date == None:
-      await Util.sendError(channel, 'Please type in a valid date.')
-      return
-    await channel.send(embed=await getSubstEmbed(date))
+    state[CLASSOF][str(channel.id)] = args[0]
+    Util.saveState()
+    await Util.sendSuccess(channel, 'The class ID for this channel is now {}'.format(args[0]))
 
 
 async def autoSend():
@@ -374,17 +422,18 @@ async def autoSend():
     await asyncio.sleep((nextTime - now).seconds)
     print('Printing...')
     now = datetime.datetime.now()
+    date = now.date()
     if now.time() > datetime.time(15, 00): #TODO print substitutions too
-      lunchEmbed = Lunch.generateEmbed(datetime.date.today() + datetime.timedelta(days=1))
-      #substEmbed = 
-    else:
-      lunchEmbed = Lunch.generateEmbed(datetime.date.today())
-      #substEmbed = 
+      date += datetime.timedelta(days=1)
+    lunchEmbed = Lunch.generateEmbed(date)
+    substs = Subst.downloadSubsts(date)
     for channelID, send in state[AUTO_SEND][i][CHANNELS].items():
       if send[LUNCH] and lunchEmbed != None:
         await client.get_channel(int(channelID)).send(embed=lunchEmbed)
-#      if send[SUBST] and substEmbed != none:
-#        await client.get_channel(stuff[CHANNEL_ID]).send(embed=subsdEmbed)
+      if send[SUBST] and substs != None:
+        substEmbed = Subst.format(substs, channelID)
+        if substEmbed != None:
+          await client.get_channel(int(channelID)).send(embed=substEmbed)
     i += 1
 
 
