@@ -485,11 +485,11 @@ async def plot(channel, args): # can throw exception, unhandled for now
 
 
 async def mention(channel, args):
-  if channel.id in state[NO_MENTION]:
-    state[NO_MENTION].remove(channel.id)
+  if str(channel.id) in state[NO_MENTION]:
+    state[NO_MENTION].remove(str(channel.id))
     await Util.sendSuccess(channel, 'Mentioning the bot is now required.')
   else:
-    state[NO_MENTION].append(channel.id)
+    state[NO_MENTION].append(str(channel.id))
     await Util.sendSuccess(channel, 'Mentioning the bot is now optional.')
   Util.saveState()
 
@@ -525,7 +525,7 @@ async def on_ready():
 @client.event
 async def on_message(message):
   channel = message.channel
-  if message.author == client.user or not (client.user in message.mentions or type(channel) == discord.channel.DMChannel or channel.id in state[NO_MENTION]):
+  if message.author == client.user or not (client.user in message.mentions or type(channel) == discord.channel.DMChannel or str(channel.id) in state[NO_MENTION]):
     return
   splitMessage = message.content.split(' ')
   if client.user in message.mentions:
