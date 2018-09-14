@@ -92,6 +92,13 @@ class Util():
     except ValueError:
       return None
 
+  def startAutoSend():
+    global autoSendTask
+    if autoSendTask != None:
+      autoSendTask.cancel()
+      autoSendTask = None
+    if len(state[AUTO_SEND]) > 0 or len(state[AUTO_SUBST]) > 0:
+      autoSendTask = client.loop.create_task(autoSend())
 
   def setStuff(time, channel, thingToSet, to): # TODO find a better name for this too
     index = Util.indexOf(time)
@@ -112,11 +119,7 @@ class Util():
       if len(state[AUTO_SEND][index][CHANNELS]) == 0:
         state[AUTO_SEND].pop(index)
     Util.saveState()
-    global autoSendTask
-    if autoSendTask != None:
-      autoSendTask.cancel()
-    if len(state[AUTO_SEND]) > 0:
-      autoSendTask = client.loop.create_task(autoSend())
+    Util.startAutoSend()
     return True
 
 
@@ -319,32 +322,47 @@ class Subst():
     await channel.send(embed=embed)
 
 
-  async def on(channel, args): # TODO add instant notify
-    if len(args) < 1:
-      await Util.sendError(channel, 'Please type in a time to schedule substitution digests for.')
-      return
-    time = Util.parseTime(args[0])
-    if time == None:
-      await Util.sendError(channel, 'Please type in a valid time.')
-      return
-    if Util.setStuff(time, channel, SUBST, True):
-      await Util.sendSuccess(channel, 'You have enabled scheduled substitution digests for this channel! You will get them every day at ' + time.strftime('%H:%M') + '.')
+  async def on(channel, args):
+    if len(args) == 0:
+      if str(channel.id) in state[AUTO_SUBST]:
+        await Util.sendError(channel, 'Automatic substitution msessages are already enabled for this channel.')
+        return
+      state[AUTO_SUBST].append(str(channel.id))
+      Util.saveState()
+      Util.startAutoSend()
+      await Util.sendSuccess(channel, 'You have enabled automatic substitution messages for this channel.')
     else:
-      await Util.sendError(channel, 'Scheduled substitution digests are already enabled for this channel at ' + time.strftime('%H:%M') + '.')
+      time = Util.parseTime(args[0])
+      if time == None:
+        await Util.sendError(channel, 'Please type in a valid time.')
+        return
+      if Util.setStuff(time, channel, SUBST, True):
+        await Util.sendSuccess(channel, 'You have enabled scheduled substitution digests for this channel! You will get them every day at ' + time.strftime('%H:%M') + '.')
+      else:
+        await Util.sendError(channel, 'Scheduled substitution digests are already enabled for this channel at ' + time.strftime('%H:%M') + '.')
 
 
   async def off(channel, args):
-    if len(args) < 1:
-      await Util.sendError(channel, 'Please type in a time to remove.')
-      return
-    time = Util.parseTime(args[0])
-    if time == None:
-      await Util.sendError(channel, 'Please type in a valid time.')
-      return
-    if Util.setStuff(time, channel, SUBST, False):
-      await Util.sendSuccess(channel, 'You have turned off scheduled substitution digests for this channel at ' + time.strftime('%H:%M') + '.')
+    if len(args) == 0:
+      if not str(channel.id) in state[AUTO_SUBST]:
+        await Util.sendError(channel, 'Automatic substitution msessages are already disabled for this channel.')
+        return
+      state[AUTO_SUBST].remove(str(channel.id))
+      Util.saveState()
+      Util.startAutoSend()
+      await Util.sendSuccess(channel, 'You have disabled automatic substitution messages for this channel.')
     else:
-      await Util.sendError(channel, 'There were no substitution digests scheduled at ' + time.strftime('%H:%M') + ' in this channel.')
+      if len(args) < 1:
+        await Util.sendError(channel, 'Please type in a time to remove.')
+        return
+      time = Util.parseTime(args[0])
+      if time == None:
+        await Util.sendError(channel, 'Please type in a valid time.')
+        return
+      if Util.setStuff(time, channel, SUBST, False):
+        await Util.sendSuccess(channel, 'You have turned off scheduled substitution digests for this channel at ' + time.strftime('%H:%M') + '.')
+      else:
+        await Util.sendError(channel, 'There were no substitution digests scheduled at ' + time.strftime('%H:%M') + ' in this channel.')
 
 
   async def info(channel, args):
@@ -414,7 +432,15 @@ async def autoSend():
       i = 0
       nextTime += datetime.timedelta(days=1)
     while nextTime - now > datetime.timedelta(seconds=30 * 60):
-      #TODO check for new substitutes
+      date = now.date()
+      if now.time() > datetime.time(15, 00):
+        date += datetime.timedelta(days=1)
+      substs = Subst.downloadSubsts(date)
+      for channelID in state[AUTO_SUBST]:
+        substEmbed = Subst.format(substs, channelID, True)
+        if substEmbed != None:
+          await client.get_channel(int(channelID)).send(embed=substEmbed)
+      state[KNOWN_SUBSTS] = substs
       print('Waiting 30 minutes...')
       await asyncio.sleep(30 * 60)
       now = datetime.datetime.now()
@@ -423,7 +449,7 @@ async def autoSend():
     print('Printing...')
     now = datetime.datetime.now()
     date = now.date()
-    if now.time() > datetime.time(15, 00): #TODO print substitutions too
+    if now.time() > datetime.time(15, 00):
       date += datetime.timedelta(days=1)
     lunchEmbed = Lunch.generateEmbed(date)
     substs = Subst.downloadSubsts(date)
@@ -492,8 +518,7 @@ subCommands = [
 @client.event
 async def on_ready():
   global autoSendTask
-  if autoSendTask == None and len(state[AUTO_SEND]) > 0:
-    autoSendTask = client.loop.create_task(autoSend())
+  Util.startAutoSend()
   print('Ready!')
 
 
