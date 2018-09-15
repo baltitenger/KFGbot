@@ -18,7 +18,7 @@ autoSendTask = None
 # constants
 LUNCH_URL = 'https://naplo.karinthy.hu/app/interface.php?view=v_canteen_export&day={date}' 
 SUBST_URL = 'https://admin.karinthy.hu/api/substitutions?day={date}'
-PLOT_OPTS = 'set term png crop; set size ratio -1; set zeroaxis; set key off; plot {function}'
+PLOT_OPTS = 'set term png crop size 1000, 1000; set size ratio -1; set samples 1000; set xrange [-10:10]; set yrange [-10:10]; set grid; set zeroaxis; set key off; plot {function}'
 STATE_FILE = 'state.json'
 AUTO_SEND = 'autoSend'
 AUTO_SUBST = 'autoSubst'
