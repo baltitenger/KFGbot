@@ -479,6 +479,7 @@ async def ping(channel, args): # ping [delay]
 
 
 async def plot(channel, args): # can throw exception, unhandled for now
+  await channel.trigger_typing()
   function = ''.join(args)
   plot = run(['gnuplot', '-e', PLOT_OPTS.format(function=function)], capture_output=True).stdout
   await channel.send("Plot of `{}`:".format(function), file=discord.File(plot, filename="plot.png"))
