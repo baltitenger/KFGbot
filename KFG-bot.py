@@ -35,14 +35,14 @@ state = {AUTO_SEND:[], AUTO_SUBST:[], CLASSOF:{}, COUNTDOWN:{}, NO_MENTION:[], K
 #TODO nyelvorak?
 
 class Util():
-  def timeAt(index):
+  def timeAt(index) -> datetime.time:
     if len(state[AUTO_SEND]) == 0:
       return None
     else:
       return datetime.time.fromisoformat(state[AUTO_SEND][index % len(state[AUTO_SEND])][ISOTIME])
 
 
-  def indexOf(time): 
+  def indexOf(time) -> int: 
     if len(state[AUTO_SEND]) == 0:
       return 0
     bot = 0
@@ -63,7 +63,7 @@ class Util():
         return top
 
 
-  def parseTime(stringTime):
+  def parseTime(stringTime) -> datetime.time:
     try:
       splitTime = stringTime.split(':')
       hour = int(splitTime[0])
@@ -76,7 +76,7 @@ class Util():
       return None
 
 
-  def parseDate(stringDate):
+  def parseDate(stringDate) -> datetime.date:
     try:
       splitDate = stringDate.split('-')
       day = int(splitDate[len(splitDate) - 1])
@@ -92,6 +92,7 @@ class Util():
     except ValueError:
       return None
 
+
   def startAutoSend():
     global autoSendTask
     if autoSendTask != None:
@@ -99,6 +100,7 @@ class Util():
       autoSendTask = None
     if len(state[AUTO_SEND]) > 0 or len(state[AUTO_SUBST]) > 0:
       autoSendTask = client.loop.create_task(autoSend())
+
 
   def setStuff(time, channel, thingToSet, to): # TODO find a better name for this too
     index = Util.indexOf(time)
@@ -150,276 +152,6 @@ class Util():
       print(e.msg)
 
 
-class Lunch():
-  def getMotd(date): # get lunch motd depending on date queried
-    if date == datetime.date.today():
-      if datetime.datetime.now().time() > datetime.time(15, 00):
-        return 'Today\'s lunch was:'
-      else:
-        return 'Here\'s today\'s lunch:'
-    elif date == datetime.date.today() + datetime.timedelta(days = 1):
-      return 'Tomorrow\'s lunch will be:'
-    elif date < datetime.date.today():
-      return 'The lunch on ' + date.isoformat() + ' was:'
-    else:
-      return 'The lunch on ' + date.isoformat() + ' will be:'
-
-
-  def format(rawlunch, date):
-    try:
-      lunch = rawlunch.split('\n\n')
-      a = lunch[0].split('\n')[1:]
-      b = lunch[1].split('\n')[1:]
-      c = lunch[2].split('\n')[1:]
-      soup = []
-      while a[0] == b[0]: # separate soup from the rest
-        soup.append(a.pop(0))
-        b.pop(0)
-        c.pop(0)
-      a = '\n'.join(a)
-      b = '\n'.join(b)
-      c = '\n'.join(c)
-      soup = '\n'.join(soup)
-      return (discord.Embed(title=Lunch.getMotd(date), type='rich', color=discord.Color.blue())
-          .add_field(name='Leves:', value=soup)
-          .add_field(name='A menü:', value=a)
-          .add_field(name='B menü:', value=b)
-          .add_field(name='C menü:', value=c)
-          .set_footer(text='Have fun!'))
-    except:
-      return discord.Embed(title=Lunch.getMotd(date), type='rich', color=discord.Color.blue(), description=rawlunch) # if lunch formatting failed, just print it out unformatted
-
-
-  def generateEmbed(date):
-    URL = LUNCH_URL.format(date=date.isoformat())
-    with urllib.request.urlopen(URL) as response:
-      lunch_xml = response.read().decode('utf-8') # get lunchxml
-      root = ET.fromstring(lunch_xml) # parse it
-      rawlunch = root[2].text # get the relevant part
-      if rawlunch == None:
-        return None
-      return Lunch.format(rawlunch, date)
-
-
-  async def print(channel, date):
-    await channel.trigger_typing()
-    lunchEmbed = Lunch.generateEmbed(date)
-    if lunchEmbed == None:
-      await Util.sendError(channel, 'The lunch for ' + date.isoformat() + ' isn\'t available yet/anymore, or there\'s no lunch on the date specified.')
-    else:
-      await channel.send(embed=lunchEmbed)
-
-  
-  async def help(channel, args): # lunch
-    embed = discord.Embed(title='Available subcommands for lunch:', type='rich',
-        description='on HH[:MM]\noff HH[:MM]\ntoday\ntomorrow\nday [[YYYY-]MM-]DD\ninfo', color=discord.Color.blue())
-    await channel.send(embed=embed)
-
-
-  async def on(channel, args): # lunch on
-    if len(args) < 1:
-      await Util.sendError(channel, 'Please type in a time for the lunch notifications.')
-      return
-    time = Util.parseTime(args[0])
-    if time == None:
-      await Util.sendError(channel, 'Please type in a valid time.')
-      return
-    if Util.setStuff(time, channel, LUNCH, True):
-      await Util.sendSuccess(channel, 'You have enabled lunch notifications for this channel! You will get them every day at ' + time.strftime('%H:%M') + '.')
-    else:
-      await Util.sendError(channel, 'Lunch notifications are already enabled for this channel at ' + time.strftime('%H:%M') + '.')
-
-
-  async def off(channel, args): # lunch off
-    if len(args) < 1:
-      await Util.sendError(channel, 'Please type in a time to remove.')
-      return
-    time = Util.parseTime(args[0])
-    if time == None:
-      await Util.sendError(channel, 'Please type in a valid time.')
-      return
-    if Util.setStuff(time, channel, LUNCH, False):
-      await Util.sendSuccess(channel, 'You have turned off lunch notifications for this channel at ' + time.strftime('%H:%M') + '.')
-    else:
-      await Util.sendError(channel, 'There were no lunch notifications scheduled at ' + time.strftime('%H:%M') + ' in this channel.')
-
-
-  async def info(channel, args): # lunch info
-    times = []
-    for i in range(len(state[AUTO_SEND])):
-      if str(channel.id) in state[AUTO_SEND][i][CHANNELS] and state[AUTO_SEND][i][CHANNELS][str(channel.id)][LUNCH]:
-        times.append(Util.timeAt(i).strftime('%H:%M'))
-    if len(times) == 0:
-      description = 'There aren\'t any lunch notifications set for this channel.'
-    elif len(times) == 1:
-      description = 'You will get lunch notifications at ' + times[0]
-    else:
-      description = 'You will get lunch notifications at the following times:\n' + '\n'.join(times)
-    embed = discord.Embed(title='Lunch info:', description=description,
-        type='rich', color=discord.Color.blue())
-    await channel.send(embed=embed)
-
-
-  async def today(channel, args): # lunch today
-    await Lunch.print(channel, datetime.date.today())
-
-
-  async def tomorrow(channel, args): # $lunch tomorrow
-    await Lunch.print(channel, datetime.date.today() + datetime.timedelta(days=1))
-
-
-  async def day(channel, args): # $lunch day
-    if len(args) != 1:
-      await Util.sendError(channel, 'Please type in a date for your lunch request.')
-      return
-    date = Util.parseDate(args[0])
-    if date == None:
-      await Util.sendError(channel, 'Please type in a valid date.')
-      return
-    await Lunch.print(channel, date)
-
-
-class Subst():
-  def getMotd(date, diffOnly):
-    if diffOnly:
-      motd = 'Here are {}\'s new substitutions:'
-    else:
-      motd = 'Here are {}\'s substitutions:'
-    if datetime.date.today() == date:
-      return motd.format('today')
-    else:
-      return motd.format('tomorrow')
-
-
-  def format(substs, channelID, diffOnly=False):
-    if not channelID in state[CLASSOF]:
-      embed = discord.Embed(title='Error!', type='rich', color=discord.Color.red(), description='Class not given!')
-      return  embed
-    classID = state[CLASSOF][channelID]
-    substEmbed = discord.Embed(type='rich', color=discord.Color.blue())
-    empty = True
-    for s in substs:
-      if s['class'] == classID and (not diffOnly or s not in state[KNOWN_SUBSTS]):
-        empty = False
-        substEmbed.add_field(name=s['subject'] or '?', value='lesson {}\n{}\n{}\n~~{}~~\nroom {}'.format(
-          s['lesson'] or '?', s['comment'] or '?', s['substitutingTeacher'] or '?', s['missingTeacher'] or '?', s['room'] or '?'))
-    if empty:
-      return None
-    substEmbed.title = Subst.getMotd(datetime.date.fromisoformat(substs[0]['day']), diffOnly)
-    return substEmbed
-
-
-  def downloadSubsts(date):
-    request = urllib.request.Request(SUBST_URL.format(date=date.isoformat()))
-    request.add_header('Accept', 'application/json')
-    with urllib.request.urlopen(request) as response:
-      return json.load(response)['substitutions']
-
-
-  async def help(channel, args):
-    embed = discord.Embed(title='Available subcommands for subst:', type='rich',
-        description='on [HH[:MM]]\noff [HH[:MM]]\ntoday\ntomorrow\nday [[YYYY-]MM-]DD\nsetClass class\ninfo', color=discord.Color.blue())
-    await channel.send(embed=embed)
-
-
-  async def on(channel, args):
-    if len(args) == 0:
-      if str(channel.id) in state[AUTO_SUBST]:
-        await Util.sendError(channel, 'Automatic substitution msessages are already enabled for this channel.')
-        return
-      state[AUTO_SUBST].append(str(channel.id))
-      Util.saveState()
-      Util.startAutoSend()
-      await Util.sendSuccess(channel, 'You have enabled automatic substitution messages for this channel.')
-    else:
-      time = Util.parseTime(args[0])
-      if time == None:
-        await Util.sendError(channel, 'Please type in a valid time.')
-        return
-      if Util.setStuff(time, channel, SUBST, True):
-        await Util.sendSuccess(channel, 'You have enabled scheduled substitution digests for this channel! You will get them every day at ' + time.strftime('%H:%M') + '.')
-      else:
-        await Util.sendError(channel, 'Scheduled substitution digests are already enabled for this channel at ' + time.strftime('%H:%M') + '.')
-
-
-  async def off(channel, args):
-    if len(args) == 0:
-      if not str(channel.id) in state[AUTO_SUBST]:
-        await Util.sendError(channel, 'Automatic substitution msessages are already disabled for this channel.')
-        return
-      state[AUTO_SUBST].remove(str(channel.id))
-      Util.saveState()
-      Util.startAutoSend()
-      await Util.sendSuccess(channel, 'You have disabled automatic substitution messages for this channel.')
-    else:
-      if len(args) < 1:
-        await Util.sendError(channel, 'Please type in a time to remove.')
-        return
-      time = Util.parseTime(args[0])
-      if time == None:
-        await Util.sendError(channel, 'Please type in a valid time.')
-        return
-      if Util.setStuff(time, channel, SUBST, False):
-        await Util.sendSuccess(channel, 'You have turned off scheduled substitution digests for this channel at ' + time.strftime('%H:%M') + '.')
-      else:
-        await Util.sendError(channel, 'There were no substitution digests scheduled at ' + time.strftime('%H:%M') + ' in this channel.')
-
-
-  async def info(channel, args):
-    times = []
-    for i in range(len(state[AUTO_SEND])):
-      if str(channel.id) in state[AUTO_SEND][i][CHANNELS] and state[AUTO_SEND][i][CHANNELS][str(channel.id)][SUBST]:
-        times.append(Util.timeAt(i).strftime('%H:%M'))
-    if len(times) == 0:
-      if str(channel.id) in state[AUTO_SUBST]:
-        description = 'You will get substitution notifications right when they get on the board.'
-      else:
-        description = 'Substitution notifications are turned off for this channel.'
-    else:
-      if len(times) == 1:
-        if str(channel.id) in state[AUTO_SUBST]:
-          description = 'You will get substitution notifications at ' + times[0] + ' and right when they get on the board.'
-        else:
-          description = 'You will get lunch notifications at ' + times[0]
-      else:
-        if str(channel.id) in state[AUTO_SUBST]:
-          description = 'You will get lunch notifications at the following times:\n' + '\n'.join(times) + '\nRight when they get on the board'
-        else:
-          description = 'You will get lunch notifications at the following times:\n' + '\n'.join(times)
-    if str(channel.id) in state[CLASSOF]:
-      description += "\nClass ID for this channel is {}".format(state[CLASSOF][str(channel.id)]) 
-    else:
-      description += "\nClass ID not set for this channel." 
-    embed = discord.Embed(title='Lunch info:', description=description,
-        type='rich', color=discord.Color.blue())
-    await channel.send(embed=embed)
-
-
-  async def print(channel, date):
-    await channel.trigger_typing()
-    substEmbed = Subst.format(Subst.downloadSubsts(date), str(channel.id))
-    if substEmbed == None:
-      substEmbed = discord.Embed(title='There are no substitutions.', type='rich', color=discord.Color.blue())
-    await channel.send(embed=substEmbed)
-
-
-  async def today(channel, args):
-    await Subst.print(channel, datetime.date.today())
-
-
-  async def tomorrow(channel, args):
-    await Subst.print(channel, datetime.date.today() + datetime.timedelta(days=1))
-
-
-  async def classID(channel, args):
-    if len(args) < 1:
-      await Util.sendError(channel, 'Please type in a time to remove.')
-      return
-    state[CLASSOF][str(channel.id)] = args[0]
-    Util.saveState()
-    await Util.sendSuccess(channel, 'The class ID for this channel is now {}'.format(args[0]))
-
-
 async def autoSend():
   i = Util.indexOf(datetime.datetime.now().time())
   print('autoSend started...')
@@ -461,13 +193,20 @@ async def autoSend():
     i += 1
 
 
+#Commands:
 async def help(channel, args):
-  embed = discord.Embed(title='Available commands:', type='rich',
-      description='lunch [...]\nsubst [...]\nping [delay]\nplot function\nmention', color=discord.Color.blue())
-  await channel.send(embed=embed)
+  """help
+  Print help."""
+  helpEmbed = discord.Embed(title='Available commands:', type='rich', color=discord.Color.blue())
+  for command in commands.values():
+    doc = command.__doc__.splitlines()
+    helpEmbed.add_field(name=doc[0], value='\n'.join(doc[1:]))
+  await channel.send(embed=helpEmbed)
 
 
 async def ping(channel, args): # ping [delay]
+  """ping [delay]
+  Reply with `pong` after [delay] seconds."""
   if len(args) == 1:
     try:
       await asyncio.sleep(int(args[0]))
@@ -477,6 +216,8 @@ async def ping(channel, args): # ping [delay]
 
 
 async def plot(channel, args): # can throw exception, unhandled for now
+  """plot function
+  Reply with an image of the plot of [function]. See the documentation of gnuplot for additional info."""
   await channel.trigger_typing()
   function = ''.join(args)
   output = run(['gnuplot', '-e', PLOT_OPTS.format(function=function)], capture_output=True)
@@ -487,6 +228,8 @@ async def plot(channel, args): # can throw exception, unhandled for now
 
 
 async def mention(channel, args):
+  """mention
+  toggles optional/recquired mentioning the bot."""
   if str(channel.id) in state[NO_MENTION]:
     state[NO_MENTION].remove(str(channel.id))
     await Util.sendSuccess(channel, 'Mentioning the bot is now required.')
@@ -496,6 +239,347 @@ async def mention(channel, args):
   Util.saveState()
 
 
+class Lunch():
+  """lunch [...]
+  see `lunch help` for more info."""
+  def getMotd(date) -> str:
+    """Get lunch motd"""
+    if date == datetime.date.today():
+      if datetime.datetime.now().time() > datetime.time(15, 00):
+        return 'Today\'s lunch was:'
+      else:
+        return 'Here\'s today\'s lunch:'
+    elif date == datetime.date.today() + datetime.timedelta(days = 1):
+      return 'Tomorrow\'s lunch will be:'
+    elif date < datetime.date.today():
+      return 'The lunch on ' + date.isoformat() + ' was:'
+    else:
+      return 'The lunch on ' + date.isoformat() + ' will be:'
+
+
+  def format(rawlunch, date) -> discord.Embed:
+    """Formats raw lunch"""
+    try:
+      lunch = rawlunch.split('\n\n')
+      a = lunch[0].split('\n')[1:]
+      b = lunch[1].split('\n')[1:]
+      c = lunch[2].split('\n')[1:]
+      soup = []
+      while a[0] == b[0]: # separate soup from the rest
+        soup.append(a.pop(0))
+        b.pop(0)
+        c.pop(0)
+      a = '\n'.join(a)
+      b = '\n'.join(b)
+      c = '\n'.join(c)
+      soup = '\n'.join(soup)
+      return (discord.Embed(title=Lunch.getMotd(date), type='rich', color=discord.Color.blue())
+          .add_field(name='Leves:', value=soup)
+          .add_field(name='A menü:', value=a)
+          .add_field(name='B menü:', value=b)
+          .add_field(name='C menü:', value=c)
+          .set_footer(text='Have fun!'))
+    except:
+      return discord.Embed(title=Lunch.getMotd(date), type='rich', color=discord.Color.blue(), description=rawlunch) # if lunch formatting failed, just print it out unformatted
+
+
+  def acquire(date) -> str:
+    """Downloads the lunch on [date]"""
+    URL = LUNCH_URL.format(date=date.isoformat())
+    with urllib.request.urlopen(URL) as response:
+      lunch_xml = response.read().decode('utf-8') # get lunchxml
+      root = ET.fromstring(lunch_xml) # parse it
+      return root[2].text # get the relevant part
+
+
+  async def print(channel, date) -> None:
+    """Prints the lunch on [date] to [channel]."""
+    await channel.trigger_typing()
+    lunchEmbed = Lunch.format(Lunch.acquire(date), date)
+    if lunchEmbed == None:
+      await Util.sendError(channel, 'The lunch for ' + date.isoformat() + ' isn\'t available yet/anymore, or there\'s no lunch on the date specified.')
+    else:
+      await channel.send(embed=lunchEmbed)
+
+  
+  #Commands:
+  async def help(channel, args) -> None:
+    """help
+    Print help."""
+    helpEmbed = discord.Embed(title='Available subcommands for lunch:', type='rich', color=discord.Color.blue())
+    for command in Lunch.commands.values():
+      doc = command.__doc__.splitlines()
+      helpEmbed.add_field(name=doc[0], value='\n'.join(doc[1:]))
+    await channel.send(embed=helpEmbed)
+
+
+  async def info(channel, args) -> None:
+    """info
+    Get info about this channel."""
+    times = []
+    for i in range(len(state[AUTO_SEND])):
+      if str(channel.id) in state[AUTO_SEND][i][CHANNELS] and state[AUTO_SEND][i][CHANNELS][str(channel.id)][LUNCH]:
+        times.append(Util.timeAt(i).strftime('%H:%M'))
+    description = None
+    if len(times) == 0:
+      title = 'There aren\'t any lunch messages scheduled for this channel.'
+    elif len(times) == 1:
+      title = 'You will get lunch messages at {}.'.format(times[0])
+    else:
+      title = 'You will get lunch notifications at the following times:'
+      description = '\n'.join(times)
+    embed = discord.Embed(title=title, description=description, type='rich', color=discord.Color.blue())
+    await channel.send(embed=embed)
+
+
+  async def today(channel, args) -> None:
+    """today
+    Print today's lunch."""
+    await Lunch.print(channel, datetime.date.today())
+
+
+  async def next(channel, args) -> None:
+    """next
+    Print the lunch on the next day which has lunch. Only checks the next week.""" #TODO no it doesn't
+    await Lunch.print(channel, datetime.date.today() + datetime.timedelta(days=1))
+
+
+  async def day(channel, args) -> None:
+    """day [[YYYY-]MM-]DD
+    Print the lunch on the specified date."""
+    if len(args) != 1:
+      await Util.sendError(channel, 'Date isn\'t given.')
+      return
+    date = Util.parseDate(args[0])
+    if date == None:
+      await Util.sendError(channel, '{} isn\'t a valid date.'.format(' '.join(args)))
+      return
+    await Lunch.print(channel, date)
+
+
+  async def on(channel, args) -> None:
+    """on HH[:MM]
+    Turn on scheduled lunch messages at a given time. Multiple times can be set for a channel."""
+    if len(args) < 1:
+      await Util.sendError(channel, 'Time isn\'t given.')
+      return
+    time = Util.parseTime(args[0])
+    if time == None:
+      await Util.sendError(channel, '{} isn\'t a valid time.'.format(' '.join(args)))
+      return
+    if Util.setStuff(time, channel, LUNCH, True):
+      await Util.sendSuccess(channel, 'You have enabled scheduled lunch messages for this channel! You will get them every day at {}.'.format(time.strftime('%H:%M')))
+    else:
+      await Util.sendError(channel, 'Scheduled lunch messages are already enabled for this channel at {}.'.format(time.strftime('%H:%M')))
+
+
+  async def off(channel, args) -> None:
+    """off HH[:MM]
+    Turn off scheduled lunch messages at a given time. You can get the current schedule for a channel with the info command."""
+    if len(args) < 1:
+      await Util.sendError(channel, 'Time isn\'t given')
+      return
+    time = Util.parseTime(args[0])
+    if time == None:
+      await Util.sendError(channel, '{} isn\'t a valid time.'.format(' '.join(args)))
+      return
+    if Util.setStuff(time, channel, LUNCH, False):
+      await Util.sendSuccess(channel, 'You have disabled scheduled lunch messages for this channel at {}.'.format(time.strftime('%H:%M')))
+    else:
+      await Util.sendError(channel, 'There were no lunch messages scheduled for this channel at {}.'.format(time.strftime('%H:%M')))
+
+
+  commands = {
+    'help': help,
+    'info': info,
+    'today': today,
+    'next': next,
+    'day': day,
+    'on': on,
+    'off': off,
+    }
+
+
+class Subst():
+  """subst [...]
+  see `subst help` for more info."""
+  def getMotd(date, diffOnly):
+    """Get subst motd"""
+    if diffOnly:
+      motd = 'Here are {}\'s new substitutions:'
+    else:
+      motd = 'Here are {}\'s substitutions:'
+    if datetime.date.today() == date:
+      return motd.format('today')
+    else:
+      return motd.format('tomorrow')
+
+
+  def format(raw, channelID, diffOnly=False):
+    """Formats raw subst data"""
+    if not channelID in state[CLASSOF]:
+      embed = discord.Embed(title='Error!', type='rich', color=discord.Color.red(), description='ClassID not given!')
+      return  embed
+    classID = state[CLASSOF][channelID]
+    substEmbed = discord.Embed(type='rich', color=discord.Color.blue())
+    empty = True
+    for s in raw:
+      if s['class'] == classID and (not diffOnly or s not in state[KNOWN_SUBSTS]):
+        empty = False
+        substEmbed.add_field(name=s['subject'] or '?', value='lesson {}\n{}\n{}\n~~{}~~\nroom {}'.format(
+          s['lesson'] or '?', s['comment'] or '?', s['substitutingTeacher'] or '?', s['missingTeacher'] or '?', s['room'] or '?'))
+    if empty:
+      return None
+    substEmbed.title = Subst.getMotd(datetime.date.fromisoformat(raw[0]['day']), diffOnly)
+    return substEmbed
+
+
+  def acquire(date):
+    """Downloads the substs on [date]"""
+    request = urllib.request.Request(SUBST_URL.format(date=date.isoformat()))
+    request.add_header('Accept', 'application/json')
+    with urllib.request.urlopen(request) as response:
+      return json.load(response)['substitutions']
+
+
+  async def print(channel, date):
+    """Prints the substitutions on [date] to [channel]."""
+    await channel.trigger_typing()
+    substEmbed = Subst.format(Subst.acquire(date), str(channel.id))
+    if substEmbed == None:
+      substEmbed = discord.Embed(title='There are no substitutions.', type='rich', color=discord.Color.blue())
+    await channel.send(embed=substEmbed)
+
+
+  #Commands:
+  async def help(channel, args):
+    """help
+    Print help."""
+    helpEmbed = discord.Embed(title='Available subcommands for subst:', type='rich', color=discord.Color.blue())
+    for command in Subst.commands.values():
+      doc = command.__doc__.splitlines()
+      helpEmbed.add_field(name=doc[0], value='\n'.join(doc[1:]))
+    await channel.send(embed=helpEmbed)
+
+
+  async def info(channel, args): #TODO needs cleaning up
+    """info
+    Get info about this channel."""
+    times = []
+    for i in range(len(state[AUTO_SEND])):
+      if str(channel.id) in state[AUTO_SEND][i][CHANNELS] and state[AUTO_SEND][i][CHANNELS][str(channel.id)][SUBST]:
+        times.append(Util.timeAt(i).strftime('%H:%M'))
+    if len(times) == 0:
+      if str(channel.id) in state[AUTO_SUBST]:
+        description = 'You will get substitution messages right when they get on the board.'
+      else:
+        description = 'Substitution messages are turned off for this channel.'
+    else:
+      if len(times) == 1:
+        if str(channel.id) in state[AUTO_SUBST]:
+          description = 'You will get substitution notifications at ' + times[0] + ' and right when they get on the board.'
+        else:
+          description = 'You will get lunch notifications at ' + times[0]
+      else:
+        if str(channel.id) in state[AUTO_SUBST]:
+          description = 'You will get lunch notifications at the following times:\n' + '\n'.join(times) + '\nRight when they get on the board'
+        else:
+          description = 'You will get lunch notifications at the following times:\n' + '\n'.join(times)
+    if str(channel.id) in state[CLASSOF]:
+      description += "\nClass ID for this channel is {}".format(state[CLASSOF][str(channel.id)]) 
+    else:
+      description += "\nClass ID not set for this channel." 
+    embed = discord.Embed(title='Subst info:', description=description,
+        type='rich', color=discord.Color.blue())
+    await channel.send(embed=embed)
+
+
+  async def classID(channel, args):
+    """classID
+    Set classID for this channel. Setting classID is required for all substitution operations."""
+    if len(args) < 1:
+      await Util.sendError(channel, 'ClassID isn\'t given.')
+      return
+    state[CLASSOF][str(channel.id)] = args[0]
+    Util.saveState()
+    await Util.sendSuccess(channel, 'The class ID for this channel is now {}'.format(args[0]))
+
+
+  async def today(channel, args):
+    """today
+    Print today's substitutions."""
+    await Subst.print(channel, datetime.date.today())
+
+
+  async def next(channel, args):
+    """next
+    Print the substitutions on the next day which has lunch. Only checks the next week.""" #TODO no it doesn't
+    await Subst.print(channel, datetime.date.today() + datetime.timedelta(days=1))
+
+
+  async def on(channel, args):
+    """on [HH[:MM]]
+    Turn on scheduled lunch messages at a given time. Multiple times can be set for a channel.
+    If no time was given, turn on autoSubst which checks twice an hour if there are new substitutions."""
+    if len(args) == 0:
+      if str(channel.id) in state[AUTO_SUBST]:
+        await Util.sendError(channel, 'Automatic substitution msessages are already enabled for this channel.')
+        return
+      state[AUTO_SUBST].append(str(channel.id))
+      Util.saveState()
+      Util.startAutoSend()
+      await Util.sendSuccess(channel, 'You have enabled automatic substitution messages for this channel.')
+    else:
+      time = Util.parseTime(args[0])
+      if time == None:
+        await Util.sendError(channel, '{} isn\'t a valid time.'.format(' '.join(args)))
+        return
+      if Util.setStuff(time, channel, SUBST, True):
+        await Util.sendSuccess(channel, 'You have enabled scheduled substitution messages for this channel! You will get them every day at {}.'.format(time.strftime('%H:%M')))
+      else:
+        await Util.sendError(channel, 'Scheduled substitution messages are already enabled for this channel at {}.'.format(time.strftime('%H:%M')))
+
+
+  async def off(channel, args):
+    """off HH[:MM]
+    Turn off scheduled substitution messages at a given time. You can get the current schedule for a channel with the info command.
+    If no time was given, turn off autoSubst."""
+    if len(args) == 0:
+      if not str(channel.id) in state[AUTO_SUBST]:
+        await Util.sendError(channel, 'Automatic substitution messages are already disabled for this channel.')
+        return
+      state[AUTO_SUBST].remove(str(channel.id))
+      Util.saveState()
+      Util.startAutoSend()
+      await Util.sendSuccess(channel, 'You have disabled automatic substitution messages for this channel.')
+    else:
+      time = Util.parseTime(args[0])
+      if time == None:
+        await Util.sendError(channel, '{} isn\'t a valid time.'.format(' '.join(args)))
+        return
+      if Util.setStuff(time, channel, SUBST, False):
+        await Util.sendSuccess(channel, 'You have disabled scheduled substitution messages for this channel at {}.'.format(time.strftime('%H:%M')))
+      else:
+        await Util.sendError(channel, 'There were no substitution messages scheduled for this channel at {}.'.format(time.strftime('%H:%M')))
+
+
+  commands = {
+    'help': help,
+    'info': info,
+    'classID': classID,
+    'today': today,
+    'next': next,
+    'on': on,
+    'off': off,
+    }
+
+
+class HomeWork():
+  """hw [...]
+  see `hw help` for more info."""
+  pass
+
+
 commands = {
   'help': help,
   'ping': ping,
@@ -503,6 +587,7 @@ commands = {
   'mention': mention,
   'lunch': Lunch,
   'subst': Subst,
+  'hw': HomeWork,
   }
 
 
@@ -522,19 +607,17 @@ async def on_message(message):
   if client.user in message.mentions:
     splitMessage.pop(0)
   command = commands.get(splitMessage[0])
-  notFound = False
-  if command != None:
-    args = splitMessage[1:]
-    if isinstance(command, type):
-      if hasattr(command, args[0]):
-        await getattr(command, args[0])(channel, args[1:])
-      else:
-        notFound = True
-    else:
-      await command(channel, args)
+  found = False
+  args = splitMessage[1:]
+  if isinstance(command, type):
+    subCommands = getattr(command, 'commands')
+    if args[0] in subCommands:
+      await subCommands[args[0]](channel, args[1:])
+      found = True
   else:
-    notFound = True
-  if notFound and client.user in message.mentions:
+    await command(channel, args)
+    found = True
+  if not found and client.user in message.mentions:
     await Util.sendError(channel, 'Unknown command.')
 
 
