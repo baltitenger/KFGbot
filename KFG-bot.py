@@ -292,20 +292,20 @@ class Subst():
 
 
   def format(substs, channelID, diffOnly=False):
-    motd = Subst.getMotd(datetime.date.fromisoformat(substs[0]['day']), diffOnly)
     if not channelID in state[CLASSOF]:
       embed = discord.Embed(title='Error!', type='rich', color=discord.Color.red(), description='Class not given!')
       return  embed
     classID = state[CLASSOF][channelID]
-    substEmbed = discord.Embed(title=motd, type='rich', color=discord.Color.blue())
+    substEmbed = discord.Embed(type='rich', color=discord.Color.blue())
     empty = True
     for s in substs:
       if s['class'] == classID and (not diffOnly or s not in state[KNOWN_SUBSTS]):
         empty = False
-        substEmbed.add_field(name=s['subject'], value='lesson {}\n{}\n{}\n~~{}~~\nroom {}'.format(
-          s['lesson'], s['comment'], s['substitutingTeacher'], s['missingTeacher'], s['room']))
+        substEmbed.add_field(name=s['subject'] or '?', value='lesson {}\n{}\n{}\n~~{}~~\nroom {}'.format(
+          s['lesson'] or '?', s['comment'] or '?', s['substitutingTeacher'] or '?', s['missingTeacher'] or '?', s['room'] or '?'))
     if empty:
       return None
+    substEmbed.title = Subst.getMotd(datetime.date.fromisoformat(substs[0]['day']), diffOnly)
     return substEmbed
 
 
@@ -318,7 +318,7 @@ class Subst():
 
   async def help(channel, args):
     embed = discord.Embed(title='Available subcommands for subst:', type='rich',
-        description='on [HH[:MM]]\noff [HH[:MM]]\ntoday\ntomorrow\nday [[YYYY-]MM-]DD\ninfo', color=discord.Color.blue())
+        description='on [HH[:MM]]\noff [HH[:MM]]\ntoday\ntomorrow\nday [[YYYY-]MM-]DD\nsetClass class\ninfo', color=discord.Color.blue())
     await channel.send(embed=embed)
 
 
@@ -399,10 +399,8 @@ class Subst():
     await channel.trigger_typing()
     substEmbed = Subst.format(Subst.downloadSubsts(date), str(channel.id))
     if substEmbed == None:
-      embed = discord.Embed(title='There are no substitutions.', type='rich', color=discord.Color.blue())
-      await channel.send(embed=embed)
-    else:
-      await channel.send(embed=substEmbed)
+      substEmbed = discord.Embed(title='There are no substitutions.', type='rich', color=discord.Color.blue())
+    await channel.send(embed=substEmbed)
 
 
   async def today(channel, args):
@@ -413,7 +411,7 @@ class Subst():
     await Subst.print(channel, datetime.date.today() + datetime.timedelta(days=1))
 
 
-  async def setClass(channel, args):
+  async def classID(channel, args):
     if len(args) < 1:
       await Util.sendError(channel, 'Please type in a time to remove.')
       return
@@ -506,17 +504,6 @@ commands = {
   'lunch': Lunch,
   'subst': Subst,
   }
-
-
-subCommands = [
-  'help',
-  'on',
-  'off',
-  'info',
-  'today',
-  'tomorrow',
-  'day',
-  ]
 
 
 @client.event
