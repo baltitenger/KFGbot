@@ -47,10 +47,8 @@ class Util():
       return 0
     bot = 0
     top = len(state[AUTO_SEND]) - 1
-    if time < Util.timeAt(bot):
-      return bot
-    if Util.timeAt(top) < time:
-      return top + 1
+    if time < Util.timeAt(bot) or Util.timeAt(top) < time:
+      return 0
     while True:
       avg = (top + bot) // 2
       if Util.timeAt(avg) == time:
@@ -152,45 +150,44 @@ class Util():
       print(e.msg)
 
 
-async def autoSend():
+async def autoSend(): # TODO fucked up this whole thing
   i = Util.indexOf(datetime.datetime.now().time())
+  justChecking = True
+  nextTime = datetime.datetime.combine(datetime.date.today(), Util.timeAt(i))
+  if nextTime - datetime.datetime.now() < datetime.timedelta():
+    nextTime += datetime.timedelta(days=1)
+  ++i
   print('autoSend started...')
   while True:
-    now = datetime.datetime.now()
-    nextTime = datetime.datetime.combine(now.date(), Util.timeAt(i))
-    if i == len(state[AUTO_SEND]): # -> next time to send is tomorrow
-      i = 0
-      nextTime += datetime.timedelta(days=1)
-    while nextTime - now > datetime.timedelta(seconds=30 * 60):
-      date = now.date()
-      if now.time() > datetime.time(15, 00):
-        date += datetime.timedelta(days=1)
-      substs = Subst.downloadSubsts(date)
-      for channelID in state[AUTO_SUBST]:
-        substEmbed = Subst.format(substs, channelID, True)
-        if substEmbed != None:
-          await client.get_channel(int(channelID)).send(embed=substEmbed)
-      state[KNOWN_SUBSTS] = substs
-      print('Waiting 30 minutes...')
-      await asyncio.sleep(30 * 60)
-      now = datetime.datetime.now()
-    print((nextTime - now).seconds, 'seconds to the next print.')
-    await asyncio.sleep((nextTime - now).seconds)
-    print('Printing...')
     now = datetime.datetime.now()
     date = now.date()
     if now.time() > datetime.time(15, 00):
       date += datetime.timedelta(days=1)
-    lunchEmbed = Lunch.generateEmbed(date)
-    substs = Subst.downloadSubsts(date)
-    for channelID, send in state[AUTO_SEND][i][CHANNELS].items():
+    substs = Subst.acquire(date)
+    if justChecking:
+      stuff = [ (channelID, {LUNCH: False, SUBST: True}) for channelID in state[AUTO_SUBST]]
+    else:
+      lunchEmbed = Lunch.format(Lunch.acquire(date), date)
+      stuff = state[AUTO_SEND][i][CHANNELS].items()
+      i = i + 1 % len(state[AUTO_SEND])
+      nextTime = datetime.datetime.combine(date, Util.timeAt(i))
+      if nextTime - now < datetime.timedelta():
+        nextTime += datetime.timedelta(days=1)
+      print('Printing...')
+    for channelID, send in stuff:
       if send[LUNCH] and lunchEmbed != None:
         await client.get_channel(int(channelID)).send(embed=lunchEmbed)
       if send[SUBST] and substs != None:
-        substEmbed = Subst.format(substs, channelID)
+        substEmbed = Subst.format(substs, channelID, justChecking)
         if substEmbed != None:
           await client.get_channel(int(channelID)).send(embed=substEmbed)
-    i += 1
+    if justChecking:
+      state[KNOWN_SUBSTS] = substs
+    justChecking = nextTime - now > datetime.timedelta(seconds=30 * 60)
+    if justChecking:
+      await asyncio.sleep(30 * 60)
+    else:
+      await asyncio.sleep((nextTime - now).seconds)
 
 
 #Commands:
@@ -273,6 +270,8 @@ class Lunch():
       b = '\n'.join(b)
       c = '\n'.join(c)
       soup = '\n'.join(soup)
+      if soup == '':
+        raise ValueError
       return (discord.Embed(title=Lunch.getMotd(date), type='rich', color=discord.Color.blue())
           .add_field(name='Leves:', value=soup)
           .add_field(name='A menü:', value=a)
