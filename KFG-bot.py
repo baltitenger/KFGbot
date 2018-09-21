@@ -647,6 +647,7 @@ commands = {
   }
 
 
+#Events:
 @client.event
 async def on_ready():
   global autoSendTask
@@ -662,7 +663,9 @@ async def on_message(message):
   splitMessage = message.content.split(' ')
   if client.user in message.mentions:
     splitMessage.pop(0)
-  command = commands.get(splitMessage[0])
+  if not splitMessage[0] in commands:
+    return
+  command = commands[splitMessage[0]]
   found = False
   args = splitMessage[1:]
   if isinstance(command, type):
