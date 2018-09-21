@@ -663,19 +663,18 @@ async def on_message(message):
   splitMessage = message.content.split(' ')
   if client.user in message.mentions:
     splitMessage.pop(0)
-  if not splitMessage[0] in commands:
-    return
-  command = commands[splitMessage[0]]
   found = False
-  args = splitMessage[1:]
-  if isinstance(command, type):
-    subCommands = getattr(command, 'commands')
-    if args[0] in subCommands:
-      await subCommands[args[0]](channel, args[1:])
+  if splitMessage[0] in commands:
+    command = commands[splitMessage[0]]
+    args = splitMessage[1:]
+    if isinstance(command, type):
+      subCommands = getattr(command, 'commands')
+      if args[0] in subCommands:
+        await subCommands[args[0]](channel, args[1:])
+        found = True
+    else:
+      await command(channel, args)
       found = True
-  else:
-    await command(channel, args)
-    found = True
   if not found and client.user in message.mentions:
     await Util.sendError(channel, 'Unknown command.')
 
