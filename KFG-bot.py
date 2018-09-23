@@ -3,7 +3,7 @@
 import discord
 import asyncio
 import datetime
-import urllib.request
+import aiohttp
 import xml.etree.ElementTree as ET
 import json
 
@@ -164,11 +164,11 @@ async def autoSend(): # TODO fucked up this whole thing
     date = now.date()
     if now.time() > datetime.time(15, 00):
       date += datetime.timedelta(days=1)
-    substs = Subst.acquire(date)
+    substs = await Subst.acquire(date)
     if justChecking:
       stuff = [ (channelID, {LUNCH: False, SUBST: True}) for channelID in state[AUTO_SUBST]]
     else:
-      lunchEmbed = Lunch.format(Lunch.acquire(date), date)
+      lunchEmbed = Lunch.format(await Lunch.acquire(date), date)
       stuff = state[AUTO_SEND][i][CHANNELS].items()
       i = i + 1 % len(state[AUTO_SEND])
       nextTime = datetime.datetime.combine(date, Util.timeAt(i))
@@ -271,11 +271,11 @@ class Lunch():
       return discord.Embed(title=Lunch.getMotd(date), type='rich', color=discord.Color.blue(), description=rawlunch) # if lunch formatting failed, just print it out unformatted
 
 
-  def acquire(date) -> str:
+  async def acquire(date) -> str:
     """Downloads the lunch on [date]"""
     URL = LUNCH_URL.format(date=date.isoformat())
-    with urllib.request.urlopen(URL) as response:
-      lunch_xml = response.read().decode('utf-8') # get lunchxml
+    async with aiohttp.request('GET', URL) as response:
+      lunch_xml = await response.text('utf-8') # get lunch xml
       root = ET.fromstring(lunch_xml) # parse it
       return root[2].text # get the relevant part
 
@@ -283,7 +283,7 @@ class Lunch():
   async def print(channel, date) -> None:
     """Prints the lunch on [date] to [channel]."""
     await channel.trigger_typing()
-    lunchEmbed = Lunch.format(Lunch.acquire(date), date)
+    lunchEmbed = Lunch.format(await Lunch.acquire(date), date)
     if lunchEmbed == None:
       await Util.sendError(channel, 'The lunch for ' + date.isoformat() + ' isn\'t available yet/anymore, or there\'s no lunch on the date specified.')
     else:
@@ -422,18 +422,18 @@ class Subst():
     return substEmbed
 
 
-  def acquire(date):
+  async def acquire(date):
     """Downloads the substs on [date]"""
-    request = urllib.request.Request(SUBST_URL.format(date=date.isoformat()))
-    request.add_header('Accept', 'application/json')
-    with urllib.request.urlopen(request) as response:
-      return json.load(response)['substitutions']
+    URL = SUBST_URL.format(date=date.isoformat())
+    headers = {'Accept': 'application/json'}
+    async with aiohttp.request('GET', URL, headers=headers) as response:
+      return (await response.json())['substitutions']
 
 
   async def print(channel, date):
     """Prints the substitutions on [date] to [channel]."""
     await channel.trigger_typing()
-    substEmbed = Subst.format(Subst.acquire(date), str(channel.id))
+    substEmbed = Subst.format(await Subst.acquire(date), str(channel.id))
     if substEmbed == None:
       substEmbed = discord.Embed(title='There are no substitutions.', type='rich', color=discord.Color.blue())
     await channel.send(embed=substEmbed)
