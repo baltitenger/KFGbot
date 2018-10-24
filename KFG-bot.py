@@ -34,6 +34,7 @@ KNOWN_SUBSTS = 'knownSubsts'
 state = {AUTO_SEND:[], AUTO_SUBST:[], CLASSOF:{}, COUNTDOWN:{}, NO_MENTION:[], KNOWN_SUBSTS:[]}
 ## state: {AUTO_SEND:[{ISOTIME:isotime, CHANNELS:{channelId:{LUNCH:bool, SUBST:bool}, ...}}, ...], AUTO_SUBST:[channelID, ...], CLASSOF:{channelId:class, ...}, COUNTDOWN:{channelId:msgId, ...}, KNOWN_SUBSTS:[]}
 #TODO nyelvorak?
+UPDATE_INTERVAL = 10 * 60 # seconds
 
 class Util():
   def timeAt(index) -> datetime.time:
@@ -104,23 +105,22 @@ class Util():
   def setStuff(time, channel, thingToSet, to): # TODO find a better name for this too
     index = Util.indexOf(time)
     strID = str(channel.id)
+    changed = True
     if index < len(state[AUTO_SEND]) and state[AUTO_SEND][index][ISOTIME] == time.isoformat():
-      if strID in state[AUTO_SEND][index][CHANNELS]:
-        if state[AUTO_SEND][index][CHANNELS][strID][thingToSet] == to:
-          return False
-        else:
-          state[AUTO_SEND][index][CHANNELS][strID][thingToSet] = to
-      else:
+      if not strID in state[AUTO_SEND][index][CHANNELS]:
         state[AUTO_SEND][index][CHANNELS].append({strID:{LUNCH:False, SUBST:False}})
     else:
       state[AUTO_SEND].insert(index, {ISOTIME:time.isoformat(), CHANNELS:{strID:{LUNCH:False, SUBST:False}}})
+    if state[AUTO_SEND][index][CHANNELS][strID][thingToSet] == to:
+      changed = False
     state[AUTO_SEND][index][CHANNELS][strID][thingToSet] = to
     if not (state[AUTO_SEND][index][CHANNELS][strID][LUNCH] or state[AUTO_SEND][index][CHANNELS][strID][SUBST]):
       state[AUTO_SEND][index][CHANNELS].pop(strID)
       if len(state[AUTO_SEND][index][CHANNELS]) == 0:
         state[AUTO_SEND].pop(index)
-    Util.saveState()
-    Util.startAutoSend()
+    if changed:
+      Util.saveState()
+      Util.startAutoSend()
     return True
 
 
@@ -184,9 +184,9 @@ async def autoSend(): # TODO fucked up this whole thing
           await client.get_channel(int(channelID)).send(embed=substEmbed)
     if justChecking:
       state[KNOWN_SUBSTS] = substs
-    justChecking = nextTime - now > datetime.timedelta(seconds=30 * 60)
+    justChecking = nextTime - now > datetime.timedelta(seconds=UPDATE_INTERVAL)
     if justChecking:
-      await asyncio.sleep(30 * 60)
+      await asyncio.sleep(UPDATE_INTERVAL)
     else:
       await asyncio.sleep((nextTime - now).seconds)
 
