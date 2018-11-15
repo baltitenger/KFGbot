@@ -100,6 +100,7 @@ class Util():
       autoSendTask = None
     if len(state[AUTO_SEND]) > 0 or len(state[AUTO_SUBST]) > 0:
       autoSendTask = client.loop.create_task(autoSend())
+      autoSendTask.add_done_callback(lambda fut: print(fut.exception()))
 
 
   def setStuff(time, channel, thingToSet, to): # TODO find a better name for this too
