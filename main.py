@@ -3,6 +3,7 @@
 import discord
 import asyncio
 import datetime
+import os.path
 
 from util import *
 from lunch import Lunch
@@ -118,6 +119,13 @@ async def on_message(message):
   splitMessage = message.content.split(' ')
   if client.user in message.mentions:
     splitMessage.pop(0)
+  if splitMessage[0] == "dev":
+    if dev:
+      splitMessage.pop(0);
+    else:
+      return;
+  elif dev:
+    return;
   found = False
   if splitMessage[0] in commands:
     command = commands[splitMessage[0]]
@@ -142,7 +150,12 @@ async def on_reaction_remove(reaction, user):
   await Plot.updatePlot(reaction, user)
 
 
-print('Starting...')
+if os.path.isfile("dev"):
+  dev = True;
+  print('Starting in dev mode...');
+else:
+  dev = False;
+  print('Starting...');
 
 Util.loadState()
 
