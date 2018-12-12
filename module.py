@@ -1,4 +1,5 @@
 import discord;
+import datetime;
 
 class Module(object):
   """module [...]
@@ -17,15 +18,15 @@ class Module(object):
     };
 
   @classmethod
-  def getSchedule(self) -> dict:
-    return {};
-
-  @classmethod
-  def getChecks(self) -> list:
+  def getSchedule(self) -> list:
     return [];
 
   @classmethod
-  async def handleSchedule(self, index: int):
+  def serialize(self) -> dict:
+    return {};
+
+  @classmethod
+  async def handleSchedule(self, index: datetime.time):
     pass;
 
   @classmethod
