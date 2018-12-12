@@ -9,7 +9,7 @@ from util import *
 from lunch import Lunch
 from subst import Subst
 from plot import Plot
-# from .homework import Homework
+# from homework import Homework
 
 #TODO nyelvorak?
 
