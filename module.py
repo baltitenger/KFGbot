@@ -25,7 +25,15 @@ class Module(object):
     return [];
 
   @classmethod
-  def handleReaction(self, reaction: discord.Reaction, user: discord.User, add: bool) -> bool:
+  async def handleSchedule(self, index: int):
+    pass;
+
+  @classmethod
+  async def doCheck(self):
+    pass;
+
+  @classmethod
+  async def handleReaction(self, reaction: discord.Reaction, user: discord.User, add: bool) -> bool:
     return False;
 
   @classmethod
