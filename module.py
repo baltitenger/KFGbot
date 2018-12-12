@@ -22,8 +22,12 @@ class Module(object):
     return [];
 
   @classmethod
-  def serialize(self) -> dict:
+  def save(self) -> dict:
     return {};
+
+  @classmethod
+  def load(self, data: dict):
+    pass;
 
   @classmethod
   async def handleSchedule(self, index: datetime.time):
